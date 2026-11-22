@@ -62,7 +62,12 @@ Walkie is developed and tested primarily with **Claude Code**. Open a Claude Cod
 
 `/walkie:start` sets everything up on first run (1–3 minutes, no admin rights): its own
 Python environment, packages, a voice and the speech recognition model. Then a short
-**first-steps** page opens: test your mic, check your headphones, learn a key.
+**Getting started** page opens: test your mic, check your headphones, learn a key.
+
+**Headphone buttons on Linux:** If Walkie cannot read the media keys yet, open
+*Getting started → Unlock buttons* or run `walkie keys unlock` in a terminal. Your system asks for
+administrator approval once to install the udev rule. Reconnect the headset if needed.
+Walkie itself runs as your regular user.
 
 **Install from a terminal** (Linux/macOS):
 
@@ -105,7 +110,7 @@ Claude dictation, the command shows the path to the recording.
 | **Windows 10/11** | experimental – not yet tested on real hardware; headphone keys via media keys |
 | **macOS** | experimental – not yet tested on real hardware; needs microphone and accessibility permissions |
 
-Linux note: reading the headphone keys needs a one-time permission – one click on *Unlock keys*
+Linux note: reading the headphone keys needs a one-time permission – one click on *Unlock buttons*
 in the first-steps page (your system asks for your password; or `walkie keys unlock`). It only
 makes the headphones' key device readable for you (`extras/udev/70-walkie-avrcp.rules`).
 Until then, click the figure or use the hotkey. On Wayland the global hotkey only works while an X11 window has focus – the

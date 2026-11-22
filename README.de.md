@@ -65,6 +65,11 @@ Walkie wird in erster Linie für **Claude Code** entwickelt und dort getestet. �
 eigene Python-Umgebung, Pakete, eine Stimme und die Spracherkennung. Danach öffnet sich
 **„Erste Schritte“**: Mikro testen, Kopfhörer prüfen, Taste anlernen.
 
+**Kopfhörertasten unter Linux:** Falls Walkie die Medientasten noch nicht lesen kann, öffne
+*Erste Schritte → Tasten freischalten* oder führe `walkie keys unlock` im Terminal aus.
+Dein System fragt einmalig nach Administratorrechten, um die udev-Regel zu installieren.
+Verbinde den Kopfhörer danach bei Bedarf neu. Walkie selbst läuft als normaler Benutzer.
+
 **Aus dem Terminal installieren** (Linux/macOS):
 
 ```sh
