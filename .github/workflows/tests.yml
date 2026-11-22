@@ -30,7 +30,8 @@ jobs:
         if: runner.os != 'Windows'
         run: sh -n install.sh && sh -n start.sh && sh -n bin/walkie
       - name: Plugin ohne Python-Hooks
-        run: python -c "import json; assert json.load(open('hooks/hooks.json')) == {'modules': ['./main.tsx']}"
+        run: |
+          python -c "import json; assert json.load(open('hooks/hooks.json')) == {'modules': ['./main.tsx']}"
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Starter (Windows)
