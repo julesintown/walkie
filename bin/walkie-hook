@@ -1,0 +1,10 @@
+#!/bin/sh
+# Codex plugin hook: report a session event to the Walkie (hook.py needs only the
+# standard library). Prefers the Walkie's own Python, else python3; silent without Python.
+here="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
+share="${XDG_DATA_HOME:-$HOME/.local/share}/walkie"
+for py in "$WALKIE_VENV/bin/python" "$share/venv/bin/python" "$here/.venv/bin/python"; do
+  [ -x "$py" ] && exec "$py" "$here/hook.py" --plugin-codex "$@"
+done
+command -v python3 >/dev/null 2>&1 && exec python3 "$here/hook.py" --plugin-codex "$@"
+exit 0

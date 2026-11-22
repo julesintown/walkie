@@ -1,0 +1,14 @@
+{
+  "name": "walkie",
+  "owner": {
+    "name": "julesintown"
+  },
+  "description": "Walkie – talk to Claude Code through your headphones",
+  "plugins": [
+    {
+      "name": "walkie",
+      "source": "./",
+      "description": "Talk to Claude Code through your headphones: a desktop companion that announces what your sessions are doing, reads out their questions and permissions, and lets you answer or give new instructions by voice. Linux, Windows, macOS."
+    }
+  ]
+}

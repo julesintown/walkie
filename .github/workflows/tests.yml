@@ -1,0 +1,72 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Schnelle Tests auf allen drei Systemen (ohne die großen Sprachmodelle)
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Qt-Bibliotheken (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: Python-Pakete (leicht)
+        run: pip install PyQt6 numpy miniaudio pynput
+      - name: Shell-Skripte
+        if: runner.os != 'Windows'
+        run: sh -n install.sh && sh -n start.sh && sh -n bin/walkie
+      - name: Plugin ohne Python-Hooks
+        run: python -c "import json; assert json.load(open('hooks/hooks.json')) == {'modules': ['./main.tsx']}"
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+      - name: Starter (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: bin\walkie.cmd status && bin\walkie.cmd list --json > NUL
+      - name: Starter (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: sh bin/walkie status && sh bin/walkie list --json > /dev/null
+      - name: Doctor (darf Fehlendes melden)
+        run: python doctor.py || exit 0
+
+  # Der echte Weg eines Erstnutzers: walkie setup (venv, alle Pakete, Stimme, Whisper)
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONIOENCODING: utf-8
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Qt-Bibliotheken (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: walkie setup (ohne Start)
+        run: python cli.py setup --no-start
+      - name: Begleiter startet und antwortet (offscreen)
+        shell: bash
+        run: |
+          python cli.py start
+          python cli.py status
+          python cli.py stop

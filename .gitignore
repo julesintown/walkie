@@ -1,0 +1,16 @@
+# Laufzeit
+.venv/
+__pycache__/
+run/
+*.log
+
+# Assets werden lokal heruntergeladen, nie ins Repo:
+# eigene Figuren (fremde Grafiken, Lizenz beim Nutzer) und Stimmen (groß)
+sprites/*
+!sprites/README.md
+voices/*
+!voices/README.md
+
+
+# lokale Einstellungen
+config.env

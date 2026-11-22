@@ -1,0 +1,45 @@
+#!/bin/sh
+# `walkie` – Walkie im Terminal (Einstellungen, Tasten, Start/Stopp, Einrichtung).
+# Nimmt die Python-Umgebung des Walkies (paths.py), sonst python3 (3.10+). Gibt es kein
+# passendes Python, holt es uv (uvboot.py; Prüfsummen dort) und startet damit – ohne Adminrechte.
+here="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
+share="${XDG_DATA_HOME:-$HOME/.local/share}/walkie"
+for py in "$WALKIE_VENV/bin/python" "$share/venv/bin/python" "$here/.venv/bin/python"; do
+  [ -x "$py" ] && exec "$py" "$here/cli.py" "$@"
+done
+# System-Python: alt reicht (cli.py holt dann selbst uv), nur ganz fehlen darf es nicht
+# (macOS ohne Xcode-Werkzeuge: /usr/bin/python3 ist nur ein Platzhalter, der ein
+#  Installationsfenster öffnet – dann lieber gleich uv)
+nopy=
+[ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1 && nopy=1
+if [ -z "$nopy" ] && command -v python3 >/dev/null 2>&1 && python3 -c "import sys" >/dev/null 2>&1; then
+  exec python3 "$here/cli.py" "$@"
+fi
+
+# Kein Python: uv direkt laden (feste Version, SHA-256 wie in uvboot.py)
+uv="$share/uv/uv"
+if [ ! -x "$uv" ]; then
+  arch="$(uname -m)"; os="$(uname -s)"
+  case "$arch" in arm64|aarch64) arch=aarch64 ;; x86_64|amd64) arch=x86_64 ;; *) arch= ;; esac
+  case "$os" in Darwin) target="$arch-apple-darwin" ;; Linux) target="$arch-unknown-linux-gnu" ;; *) target= ;; esac
+  name="uv-$target.tar.gz"
+  sum="$(grep -A1 "\"$name\":" "$here/uvboot.py" | tail -n 1 | tr -dc '0-9a-f')"
+  if [ -z "$arch" ] || [ -z "$target" ] || [ -z "$sum" ]; then
+    echo "Python 3.10+ fehlt und für dieses System gibt es kein fertiges uv." >&2
+    echo "Bitte Python installieren (Linux: Paketverwaltung, macOS: python.org)." >&2
+    exit 1
+  fi
+  version="$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$here/uvboot.py")"
+  url="https://github.com/astral-sh/uv/releases/download/$version/$name"
+  tmp="$(mktemp -d)" || exit 1
+  echo "Kein Python gefunden – lade uv $version (bringt ein passendes Python mit) …" >&2
+  if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$tmp/$name"
+  else wget -q "$url" -O "$tmp/$name"; fi || { echo "Download fehlgeschlagen." >&2; exit 1; }
+  got="$( (sha256sum "$tmp/$name" 2>/dev/null || shasum -a 256 "$tmp/$name") | cut -d' ' -f1)"
+  [ "$got" = "$sum" ] || { echo "uv: Prüfsumme stimmt nicht – abgebrochen." >&2; rm -rf "$tmp"; exit 1; }
+  tar -xzf "$tmp/$name" -C "$tmp" && mkdir -p "$share/uv" \
+    && cp "$tmp/uv-$target/uv" "$uv" && chmod +x "$uv"
+  rm -rf "$tmp"
+  [ -x "$uv" ] || { echo "uv ließ sich nicht einrichten." >&2; exit 1; }
+fi
+exec "$uv" run --no-project --python 3.12 "$here/cli.py" "$@"

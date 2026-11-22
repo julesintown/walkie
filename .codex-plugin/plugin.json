@@ -1,0 +1,25 @@
+{
+  "name": "walkie",
+  "version": "0.3.0",
+  "description": "Talk to your coding agent through your headphones: a desktop companion that announces what your sessions are doing, reads out their answers, questions and permissions, and lets you answer by voice. Linux, Windows, macOS.",
+  "author": {
+    "name": "julesintown"
+  },
+  "license": "MIT",
+  "keywords": [
+    "voice",
+    "headphones",
+    "hands-free",
+    "speech",
+    "tts",
+    "desktop-companion",
+    "accessibility"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Walkie",
+    "shortDescription": "Voice companion for your coding agent",
+    "category": "Productivity"
+  },
+  "hooks": "./.codex-plugin/hooks.json"
+}

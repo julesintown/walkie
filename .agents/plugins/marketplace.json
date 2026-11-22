@@ -1,0 +1,20 @@
+{
+  "name": "walkie",
+  "interface": {
+    "displayName": "Walkie"
+  },
+  "plugins": [
+    {
+      "name": "walkie",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

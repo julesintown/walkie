@@ -1,0 +1,6 @@
+# Bluetooth-Kopfhörer-Tasten (AVRCP) für den angemeldeten Benutzer lesbar machen,
+# damit Play/Pause den Walkie zuhören lässt. Einmalig mit Admin-Rechten:
+#   sudo cp extras/udev/70-walkie-avrcp.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger
+# Danach Kopfhörer einmal neu verbinden.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="*(AVRCP)", TAG+="uaccess"
