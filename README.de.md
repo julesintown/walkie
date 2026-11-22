@@ -53,6 +53,8 @@ Spracherkennung (Whisper) und Stimme (Piper) laufen auf deinem Rechner. Details 
 
 ## Installation
 
+Walkie wird in erster Linie für **Claude Code** entwickelt und dort getestet. Öffne eine Claude-Code-Sitzung und gib die folgenden Befehle nacheinander ein.
+
 ```
 /plugin marketplace add julesintown/walkie
 /plugin install walkie@walkie
