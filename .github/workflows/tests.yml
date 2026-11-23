@@ -29,9 +29,6 @@ jobs:
       - name: Shell-Skripte
         if: runner.os != 'Windows'
         run: sh -n install.sh && sh -n start.sh && sh -n bin/walkie
-      - name: Plugin ohne Python-Hooks
-        run: |
-          python -c "import json; assert json.load(open('hooks/hooks.json')) == {'modules': ['./main.tsx']}"
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Starter (Windows)
@@ -41,8 +38,27 @@ jobs:
       - name: Starter (Linux/macOS)
         if: runner.os != 'Windows'
         run: sh bin/walkie status && sh bin/walkie list --json > /dev/null
-      - name: Doctor (darf Fehlendes melden)
-        run: python doctor.py || exit 0
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Python-Syntax und undefinierte Namen
+        run: |
+          python -m compileall -q -x '/[.]' .
+          python -m pip install ruff==0.14.6
+          python -m ruff check --select E9,F821 .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Plugin-Manifeste und Hook-Tests
+        run: |
+          npm install --global @anthropic-ai/claude-code@2.1.330
+          claude plugin validate --strict .
+          claude plugin test .
 
   # Der echte Weg eines Erstnutzers: walkie setup (venv, alle Pakete, Stimme, Whisper)
   install:
@@ -55,6 +71,8 @@ jobs:
       QT_QPA_PLATFORM: offscreen
       PYTHONIOENCODING: utf-8
       NO_COLOR: "1"
+      WALKIE_RUN: ${{ github.workspace }}/run
+      WALKIE_NO_WELCOME: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,11 +81,42 @@ jobs:
       - name: Qt-Bibliotheken (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
-      - name: walkie setup (ohne Start)
-        run: python cli.py setup --no-start
-      - name: Begleiter startet und antwortet (offscreen)
-        shell: bash
+      - name: Erstinstallation
+        run: python cli.py setup --no-start ${{ runner.os != 'Linux' && '--no-assets' || '' }}
+      - name: Heruntergeladene Modelle offline öffnen
+        if: runner.os == 'Linux'
+        env:
+          HF_HUB_OFFLINE: "1"
+        run: |
+          ~/.local/share/walkie/venv/bin/python - <<'PYTHON'
+          from pathlib import Path
+          from faster_whisper import WhisperModel
+          from piper import PiperVoice
+          import settings as S
+          voice = S.VOICES[S.get("WALKIE_VOICE")][0]
+          PiperVoice.load(str(Path("voices") / f"{voice}.onnx"))
+          WhisperModel(S.get("WALKIE_WHISPER"), device="cpu", compute_type="int8", local_files_only=True)
+          PYTHON
+      - name: Begleiter starten, Brücke abfragen und beenden
+        env:
+          HF_HUB_OFFLINE: "1"
         run: |
           python cli.py start
           python cli.py status
+          python cli.py sessions
           python cli.py stop
+          python -c "from hook import SERVER, acquire_lock; assert not SERVER.exists(); lock = acquire_lock(); assert lock is not None; lock.close()"
+        shell: bash
+      - name: Prozessstatus sichern (Linux/macOS)
+        if: failure() && runner.os != 'Windows'
+        run: ps -A -o pid,ppid,stat,comm > walkie-processes.txt
+      - name: Prozessstatus sichern (Windows)
+        if: failure() && runner.os == 'Windows'
+        run: Get-Process | Select-Object Id, ProcessName, Responding | Out-File -Encoding utf8 walkie-processes.txt
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: walkie-diagnose-${{ runner.os }}
+          path: |
+            run/walkie.log
+            walkie-processes.txt

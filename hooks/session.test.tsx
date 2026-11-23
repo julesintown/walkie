@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { confirmDelivery, submitVoice } from './session'
+import { checkVoiceSubmission, confirmDelivery } from './session'
 
 type Fetch = { url: string; init?: { method?: string; body?: string } }
 
@@ -145,11 +145,11 @@ test('ein von der Engine abgelehnter Prompt gilt nicht als zugestellt', async ($
   on('prompt.submit', () => answer as never)
   let failed = false
   try {
-    await submitVoice($, 'Hallo')
+    checkVoiceSubmission(await $.prompt.submit({ text: 'Hallo', wait: false, origin: { kind: 'unclassified' } }))
   } catch {
     failed = true
   }
   expect(failed).toBe(true)
   answer = { text: 'Hallo' }
-  await submitVoice($, 'Hallo')
+  checkVoiceSubmission(await $.prompt.submit({ text: 'Hallo', wait: false, origin: { kind: 'unclassified' } }))
 })

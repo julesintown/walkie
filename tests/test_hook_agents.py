@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -22,8 +23,8 @@ class HookTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.env = {k: v for k, v in os.environ.items()
                     if k != "WALKIE_SESSION" and not k.startswith("CLAUDE")}
-        self.env.update(WALKIE_UI_LANG="de", WALKIE_RUN=str(self.tmp / "run"), XDG_RUNTIME_DIR=str(self.tmp),
-                        WALKIE_CONFIG=str(self.tmp / "config.env"),
+        self.env.update(PYTHONIOENCODING="utf-8", WALKIE_UI_LANG="de", WALKIE_RUN=str(self.tmp / "run"),
+                        XDG_RUNTIME_DIR=str(self.tmp), WALKIE_CONFIG=str(self.tmp / "config.env"),
                         HOME=str(self.tmp))
 
     def tearDown(self):
@@ -33,7 +34,7 @@ class HookTest(unittest.TestCase):
         env = dict(self.env, **({"WALKIE_SESSION": "1"} if own else {}))
         r = subprocess.run([sys.executable, str(ROOT / "hook.py"), *args],
                            input=json.dumps(data if data is not None else {}),
-                           text=True, capture_output=True, env=env, timeout=20)
+                           encoding="utf-8", capture_output=True, env=env, timeout=20)
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
 
@@ -41,7 +42,7 @@ class HookTest(unittest.TestCase):
         f = self.tmp / "run" / "events.jsonl"
         if not f.exists():
             return []
-        return [json.loads(line) for line in f.read_text().splitlines()]
+        return [json.loads(line) for line in f.read_text(encoding="utf-8").splitlines()]
 
     def test_claude_basic_flow(self):
         for ev in ("ready", "prompt", "tool"):
@@ -69,18 +70,21 @@ class HookTest(unittest.TestCase):
         self.assertEqual(self.events(), [], "eigenes Terminal meldet über notify, Helfer nie")
 
     def test_codex_manifest_and_marketplace(self):
-        m = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text())
+        m = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(m["name"], "walkie")
         self.assertEqual(m["hooks"], "./.codex-plugin/hooks.json",
                          "eigene Datei: sonst liest Codex hooks/hooks.json des Claude-Mods")
-        hooks_file = json.loads((ROOT / ".codex-plugin" / "hooks.json").read_text())["hooks"]
+        hooks_file = json.loads((ROOT / ".codex-plugin" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
         for event, hooks in hooks_file.items():
             cmd = hooks[0]["hooks"][0]["command"]
             self.assertIn("bin/walkie-hook", cmd, event)
-        self.assertTrue((ROOT / "bin" / "walkie-hook").stat().st_mode & 0o111)
-        market = json.loads((ROOT / ".agents" / "plugins" / "marketplace.json").read_text())
+        launcher = ROOT / "bin" / "walkie-hook"
+        self.assertTrue(launcher.is_file())
+        if os.name == "posix":
+            self.assertTrue(launcher.stat().st_mode & 0o111)
+        market = json.loads((ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
         self.assertEqual(market["plugins"][0]["source"], {"source": "local", "path": "./"})
-        claude = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+        claude = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(claude["version"], m["version"], "beide Plugins gleiche Version")
 
     def test_permission_not_doubled(self):
@@ -126,7 +130,7 @@ class HookTest(unittest.TestCase):
         tr.write_text("\n".join(json.dumps(x) for x in [
             {"type": "user", "message": {"content": "hi"}},
             {"type": "assistant", "message": {"content": [{"type": "text", "text": "Aus dem Transcript"}]}},
-        ]))
+        ]), encoding="utf-8")
         self.hook("stop", data={"session_id": "S", "transcript_path": str(tr)}, own=True)
         self.assertEqual(self.events()[0]["text"], "Aus dem Transcript")
 
@@ -145,7 +149,7 @@ class HookTest(unittest.TestCase):
         tr = self.tmp / "transcript.jsonl"
         tr.write_text(json.dumps({"role": "user", "content": "x"}) + "\n"
                       + json.dumps({"type": "PLANNER_RESPONSE",
-                                    "content": [{"type": "text", "text": "Hallo von agy"}]}) + "\n")
+                                    "content": [{"type": "text", "text": "Hallo von agy"}]}) + "\n", encoding="utf-8")
         self.hook("agy", "PreInvocation", data={"conversationId": "C", "invocationNum": 1})
         self.hook("agy", "Stop", data={"conversationId": "C", "fullyIdle": False})
         self.hook("agy", "Stop", data={"conversationId": "C", "fullyIdle": True,
@@ -166,7 +170,7 @@ class HookTest(unittest.TestCase):
 
     def test_garbage_input(self):
         r = subprocess.run([sys.executable, str(ROOT / "hook.py"), "stop"], input="kein json",
-                           text=True, env=self.env, timeout=20)
+                           encoding="utf-8", env=self.env, timeout=20)
         self.assertEqual(r.returncode, 0)
         r = subprocess.run([sys.executable, str(ROOT / "hook.py"), "codex", "{kaputt"],
                            env=self.env, timeout=20)
@@ -203,7 +207,7 @@ class AgentTest(unittest.TestCase):
     def test_plugin_has_no_python_hooks(self):
         """Das Plugin meldet alles über seinen Mod (plattformneutral) – keine python3-Hooks,
         die unter Windows fehlschlagen würden."""
-        cfg = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        cfg = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         self.assertEqual(cfg, {"modules": ["./main.tsx"]})
 
     def test_codex_command(self):
@@ -216,32 +220,32 @@ class AgentTest(unittest.TestCase):
         f = self.agents.Gemini.FILE
         f.parent.mkdir(parents=True)
         f.write_text(json.dumps({"theme": "x", "hooks": {"AfterAgent": [
-            {"hooks": [{"type": "command", "command": "mine.sh"}]}]}}))
+            {"hooks": [{"type": "command", "command": "mine.sh"}]}]}}), encoding="utf-8")
         g = self.agents.Gemini("", "whisper")
         g.install_hooks()
         g.install_hooks()
-        cfg = json.loads(f.read_text())
+        cfg = json.loads(f.read_text(encoding="utf-8"))
         self.assertEqual(len(cfg["hooks"]["AfterAgent"]), 2)
         self.assertEqual(len(cfg["hooks"]["SessionStart"]), 1)
         self.agents.uninstall()
-        self.assertEqual(json.loads(f.read_text()), {"theme": "x", "hooks": {"AfterAgent": [
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8")), {"theme": "x", "hooks": {"AfterAgent": [
             {"hooks": [{"type": "command", "command": "mine.sh"}]}]}})
 
     def test_broken_config_untouched(self):
         f = self.agents.Antigravity.FILE
         f.parent.mkdir(parents=True)
-        f.write_text("{kaputt")
+        f.write_text("{kaputt", encoding="utf-8")
         self.assertFalse(self.agents.Antigravity("", "whisper").install_hooks())
-        self.assertEqual(f.read_text(), "{kaputt")
+        self.assertEqual(f.read_text(encoding="utf-8"), "{kaputt")
 
     def test_antigravity_merge(self):
         a = self.agents.Antigravity("", "whisper")
         self.assertEqual(a.command(), ["agy"])
-        cfg = json.loads(a.FILE.read_text())
+        cfg = json.loads(a.FILE.read_text(encoding="utf-8"))
         self.assertEqual(sorted(cfg["walkie"]),
                          ["PostToolUse", "PreInvocation", "SessionStart", "Stop"])
         self.agents.uninstall()
-        self.assertEqual(json.loads(a.FILE.read_text()), {})
+        self.assertEqual(json.loads(a.FILE.read_text(encoding="utf-8")), {})
 
     def test_custom_and_unknown(self):
         os.environ["WALKIE_AGENT_CMD"] = "aider --model 'x y'"
@@ -258,27 +262,16 @@ class AgentTest(unittest.TestCase):
 
 
 class AudioTest(unittest.TestCase):
-    def fake_path(self, *tools):
-        d = Path(tempfile.mkdtemp())
-        for t in tools:
-            (d / t).write_text("#!/bin/sh\n")
-            (d / t).chmod(0o755)
-        return d
-
     def test_fallback_order(self):
         import audio
-        old = os.environ["PATH"]
-        try:
-            for tools, rec, play in ((["pw-record", "pw-play", "arecord"], "pw-record", "pw-play"),
-                                     (["arecord", "aplay"], "arecord", "aplay"),
-                                     (["rec", "play"], "rec", "play"),
-                                     ([], None, None)):
-                os.environ["PATH"] = str(self.fake_path(*tools))
+        backends = [("pw-record", "pw-play"), ("parecord", "pacat"),
+                    ("arecord", "aplay"), ("rec", "play")]
+        for index, (rec, play) in enumerate([*backends, (None, None)]):
+            tools = {cmd: cmd for pair in backends[index:] for cmd in pair}
+            with self.subTest(rec=rec, play=play), patch.object(audio.shutil, "which", tools.get):
                 r, p = audio.record_cmd("x.wav"), audio.play_cmd(22050)
                 self.assertEqual(r[0] if r else None, rec)
                 self.assertEqual(p[0] if p else None, play)
-        finally:
-            os.environ["PATH"] = old
 
 
 class AssetTest(unittest.TestCase):

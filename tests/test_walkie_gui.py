@@ -44,7 +44,7 @@ def make_sprite(folder):
                    "</FrameHeight><Durations><Duration>8</Duration><Duration>8</Duration>"
                    "</Durations></Anim>")
     xml.append("</Anims></AnimData>")
-    (folder / "AnimData.xml").write_text("".join(xml))
+    (folder / "AnimData.xml").write_text("".join(xml), encoding="utf-8")
 
 
 @unittest.skipIf(QApplication is None, "PyQt6 fehlt")
@@ -52,7 +52,7 @@ class WalkieTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from unittest.mock import patch
-        cls.enter_language = patch.dict(os.environ, LC_ALL="de_DE.UTF-8")
+        cls.enter_language = patch.dict(os.environ, LC_ALL="de_DE.UTF-8", PYTHONIOENCODING="utf-8")
         cls.enter_language.start()
         cls.addClassCleanup(cls.enter_language.stop)
         import settings
@@ -63,7 +63,7 @@ class WalkieTest(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
         make_sprite(TMP / "sprite")
         (TMP / "run").mkdir(parents=True, exist_ok=True)
-        (TMP / "run" / "welcomed").write_text("1")   # Ersteinrichtung nicht automatisch öffnen
+        (TMP / "run" / "welcomed").write_text("1", encoding="utf-8")   # Ersteinrichtung nicht automatisch öffnen
         import walkie as bmod
         cls.ev = bmod
         cls.notes = []
@@ -78,11 +78,11 @@ class WalkieTest(unittest.TestCase):
         bmod.keymap.connected_headsets = lambda: []
         bmod.Walkie.has_terminal = lambda self: False     # kein echtes kitty-Terminal in Tests
         bmod.headset_mic = lambda: None
-        # These tests create many independent Walkies with asynchronous announcers.
-        # Keep both model loading and every playback stream off the host devices.
+        # Tests inspect queued announcements before playback and use no real audio devices.
         import keys
         from types import SimpleNamespace
         for target, attr, replacement in (
+                (bmod.Walkie, "announcer", lambda self: None),
                 (bmod.Walkie, "set_voice", lambda *args, **kwargs: None),
                 (bmod.audio, "Player", lambda *args, **kwargs: SimpleNamespace(ok=False)),
                 (keys, "start", lambda *args, **kwargs: [])):
@@ -122,7 +122,7 @@ class WalkieTest(unittest.TestCase):
         if own:
             env["WALKIE_SESSION"] = "1"
         subprocess.run([sys.executable, str(ROOT / "hook.py"), *args], input=json.dumps(data),
-                       text=True, env=env, check=True, timeout=20, capture_output=True)
+                       encoding="utf-8", env=env, check=True, timeout=20, capture_output=True)
 
     def view(self):
         self.b.poll_events()
@@ -290,11 +290,36 @@ class WalkieTest(unittest.TestCase):
                          {"behavior": "reply", "text": "Welches Modell denn?"},
                          "offene Frage: Rückfrage geht an die Session, nicht nochmal vorlesen")
 
+    def start_voice_hook(self, event, data, env):
+        # The hook must see EOF before the test can answer its request. Use a file
+        # for stdin so communicate() never tries to flush a closed pipe.
+        with tempfile.TemporaryFile() as payload:
+            payload.write(json.dumps(data).encode("utf-8"))
+            payload.seek(0)
+            proc = subprocess.Popen([sys.executable, str(ROOT / "hook.py"), "--plugin", event],
+                                    stdin=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    encoding="utf-8", env=env)
+
+        def cleanup():
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(timeout=10)
+            proc.stdout.close()
+            proc.stderr.close()
+
+        self.addCleanup(cleanup)
+        return proc
+
+    def voice_hook_output(self, proc):
+        stdout, stderr = proc.communicate(timeout=10)
+        self.assertEqual(proc.returncode, 0, stderr)
+        return stdout
+
     def test_voice_permission_end_to_end(self):
         """hook.py wartet, der Begleiter legt die Antwort ab, hook.py gibt die Entscheidung aus."""
-        import fcntl
-        lock = open(self.ev.LOCK, "w")
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)      # "Begleiter läuft"
+        from hook import acquire_lock
+        lock = acquire_lock()
+        self.assertIsNotNone(lock)
         try:
             self.b.announce_on = True
             env = {k: v for k, v in os.environ.items() if k != "WALKIE_SESSION"}
@@ -302,11 +327,7 @@ class WalkieTest(unittest.TestCase):
                     "tool_input": {"questions": [{"question": "Welche Farbe?", "options": [
                         {"label": "Rot", "description": ""}, {"label": "Blau",
                                                               "description": ""}]}]}}
-            proc = subprocess.Popen([sys.executable, str(ROOT / "hook.py"), "--plugin", "ask"],
-                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
-                                    env=env)
-            proc.stdin.write(json.dumps(data))
-            proc.stdin.close()
+            proc = self.start_voice_hook("ask", data, env)
             import time
             for _ in range(100):
                 self.view()
@@ -320,7 +341,7 @@ class WalkieTest(unittest.TestCase):
             result, _ = self.ev.Walkie.interpret(
                 p, "Blau.", lambda s, t: {"decision": "answer", "values": ["Blau"]})
             self.b.write_answer(req, result)
-            out = json.loads(proc.communicate(timeout=10)[0])
+            out = json.loads(self.voice_hook_output(proc))
             d = out["hookSpecificOutput"]["decision"]
             self.assertEqual(d["behavior"], "allow")
             self.assertEqual(d["updatedInput"]["answers"], {"Welche Farbe?": "Blau"})
@@ -335,22 +356,18 @@ class WalkieTest(unittest.TestCase):
 
     def test_voice_reply_to_session_question(self):
         """Session endet mit Frage -> Stop-Hook wartet, Antwort setzt die Session fort."""
-        import fcntl
+        from hook import acquire_lock
         import time
-        lock = open(self.ev.LOCK, "w")
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock = acquire_lock()
+        self.assertIsNotNone(lock)
         try:
             self.b.announce_on = True
             env = {k: v for k, v in os.environ.items() if k != "WALKIE_SESSION"}
             msg = "Ich habe das Widget gefunden.\n\nSoll ich es aus dem Repo entfernen?"
 
             def stop_hook():
-                proc = subprocess.Popen([sys.executable, str(ROOT / "hook.py"), "--plugin",
-                                         "stop"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        text=True, env=env)
-                proc.stdin.write(json.dumps({"session_id": "R", "cwd": "/p/walkie",
-                                             "last_assistant_message": msg}))
-                proc.stdin.close()
+                proc = self.start_voice_hook("stop", {"session_id": "R", "cwd": "/p/walkie",
+                                                      "last_assistant_message": msg}, env)
                 for _ in range(100):
                     self.view()
                     if any("fragt:" in x["prompt"] for x in self.b.pending.values()):
@@ -365,7 +382,7 @@ class WalkieTest(unittest.TestCase):
             result, _ = self.ev.Walkie.interpret(p, "Ja, aber sichere es vorher.",
                                                 lambda s, t: {"decision": "reply"})
             self.b.write_answer(req, result)
-            out = json.loads(proc.communicate(timeout=10)[0])
+            out = json.loads(self.voice_hook_output(proc))
             self.assertEqual(out["decision"], "block")
             self.assertIn("Ja, aber sichere es vorher.", out["reason"])
 
@@ -375,7 +392,7 @@ class WalkieTest(unittest.TestCase):
             (req, p), = self.b.pending.items()
             result, _ = self.ev.Walkie.interpret(p, "Abbrechen.", lambda s, t: {"decision": "pass"})
             self.b.write_answer(req, result)
-            self.assertEqual(proc.communicate(timeout=10)[0], "")
+            self.assertEqual(self.voice_hook_output(proc), "")
         finally:
             lock.close()
 
@@ -698,8 +715,13 @@ class WalkieTest(unittest.TestCase):
         b.term, b.say_q = Mock(), queue.Queue()
         b.cc_stop(str(wav), started, None)
         b.term.kitty.assert_not_called()
-        self.assertEqual((self.ev.RUN / wav.name).read_bytes(), b"local recording")
-        self.assertIn("walkie drafts", b.say_q.get_nowait())
+        saved = self.ev.RUN / wav.name
+        self.assertEqual(saved.read_bytes(), b"local recording")
+        drafts = [row["text"] for row in b.bridge.dictations.drafts()]
+        self.assertIn(f"WAV: {saved}", drafts)
+        messages = self.said()
+        self.assertEqual(len(messages), 1, f"Ansagen nach cc_stop: {messages!r}, Drafts: {drafts!r}")
+        self.assertIn("walkie drafts", messages[0])
 
     def test_silent_native_dictation_is_not_archived(self):
         import queue
@@ -859,7 +881,7 @@ class WalkieTest(unittest.TestCase):
         """Ohne fest gewähltes Mikro nimmt der Walkie das des verbundenen Kopfhörers."""
         import importlib
         real = importlib.import_module("walkie")
-        src = Path(real.__file__).read_text()
+        src = Path(real.__file__).read_text(encoding="utf-8")
         ns = {}
         exec(src[src.index("def headset_mic():"):src.index("def uses_headset_mic():")],
              {"audio": type("A", (), {"sources": staticmethod(
@@ -1060,8 +1082,9 @@ class WalkieTest(unittest.TestCase):
         self.b.bridge.stop()                 # kein laufender Begleiter
         r = subprocess.run([sys.executable, str(ROOT / "hook.py"), "--plugin", "ask"],
                            input=json.dumps({"session_id": "Z", "tool_name": "Bash"}),
-                           text=True, capture_output=True, timeout=5,
+                           encoding="utf-8", capture_output=True, timeout=5,
                            env={k: v for k, v in os.environ.items() if k != "WALKIE_SESSION"})
+        self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout, "")
 
     def test_bundled_figures_load(self):

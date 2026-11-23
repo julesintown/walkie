@@ -104,18 +104,29 @@ class Bridge:
                     return bridge.on_quit()
                 self._reply(404)
 
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.httpd.daemon_threads = True
-        threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
-                         daemon=True).start()
-        port = self.httpd.server_address[1]
         os.makedirs(self.run, exist_ok=True)
         path = os.path.join(self.run, "server.json")
         tmp = path + ".tmp"
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # Token nur für uns
-        with os.fdopen(fd, "w") as f:
-            json.dump({"port": port, "token": self.token, "pid": os.getpid()}, f)
-        os.replace(tmp, path)
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = httpd.server_address[1]
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"port": port, "token": self.token, "pid": os.getpid()}, f)
+            threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.05},
+                             daemon=True).start()
+            self.httpd = httpd
+            os.replace(tmp, path)
+        except (OSError, RuntimeError):
+            if self.httpd:
+                httpd.shutdown()
+            httpd.server_close()
+            self.httpd = None
+            try:
+                os.remove(tmp)
+            except FileNotFoundError:
+                pass
+            raise
         return port
 
     def stop(self):
@@ -128,6 +139,7 @@ class Bridge:
         if self.httpd:
             self.httpd.shutdown()
             self.httpd.server_close()
+            self.httpd = None
 
     # ---------------- Ereignisse ----------------
     def on_event(self, data):

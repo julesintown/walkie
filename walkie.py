@@ -61,7 +61,7 @@ from surfaces import Surfaces, ledges  # noqa: E402
 WORKDIR = S.get("WALKIE_WORKDIR") or str(HERE)
 # "claude" = Claude Codes eingebautes Diktat (Tap-Modus), "whisper" = lokal
 STT_MODE = S.get("WALKIE_STT")
-from hook import ANSWERS, EVENTS, LEARN_FLAG, LEARN_LOG, LOCK, RUN  # noqa: E402
+from hook import ANSWERS, EVENTS, LEARN_FLAG, LEARN_LOG, RUN  # noqa: E402
 VOICE_FLAG = RUN / "voice_pending"
 WHISPER_MODEL = S.get("WALKIE_WHISPER")   # "small" = genauer, ~3x langsamer
 TERM_W, TERM_H = 680, 390            # Größe des Terminals in Pixeln
@@ -456,7 +456,7 @@ LOG = RUN / "walkie.log"
 
 def dbg(msg):
     """Immer ins Log (RUN/walkie.log, ~1 MB), mit WALKIE_HEADSET_DEBUG auch auf die Konsole."""
-    line = f"{time.strftime('%F %X')} {msg}"
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
     if os.environ.get("WALKIE_HEADSET_DEBUG"):
         print("[dbg] " + line, flush=True)
     try:
@@ -799,12 +799,8 @@ class Walkie(QWidget):
         self.term = Terminal()
         # Brücke zum Plugin-Mod jeder Claude-Session (lokaler HTTP-Dienst, plattformneutral)
         self.bridge = Bridge(str(RUN), ask_wait=lambda: S.get("WALKIE_ASK_WAIT"))
-        self.bus.quit.connect(QApplication.quit)
+        self.bus.quit.connect(QApplication.instance().quit, Qt.ConnectionType.QueuedConnection)
         self.bridge.on_quit = self.bus.quit.emit
-        try:
-            dbg(f"brücke auf port {self.bridge.start()}")
-        except OSError as ex:
-            dbg(f"brücke: {ex}")
         self.look = (S.sprite_dir(), S.get("WALKIE_SCALE"))
         self.anim = Animator(SpriteSet(*self.look))
 
@@ -872,6 +868,12 @@ class Walkie(QWidget):
         self.level_timer = QTimer(self, timeout=self.check_silence)
         self.click_timer = QTimer(self, singleShot=True, timeout=self.on_click)
         threading.Thread(target=self.load_whisper, daemon=True).start()
+        try:
+            dbg(f"brücke auf port {self.bridge.start()}")
+        except (OSError, RuntimeError) as ex:
+            dbg(f"Brücke konnte nicht starten: {ex!r}")
+            self.cleanup()
+            raise
 
     # ---------------- Bewegung & Animation ----------------
     def step(self):
@@ -2932,16 +2934,35 @@ class Walkie(QWidget):
             self.speak(t("Hallo, so klinge ich jetzt."))
 
     def cleanup(self):
-        """Beim Beenden: jeder Schritt einzeln abgesichert – ein Fehler hält den Rest nicht auf."""
+        """Native Aufräumarbeiten begrenzen, solange das Instanz-Lock noch gehalten wird."""
         self.device_stop.set()
         self.key_reader.join(timeout=0.25)
-        for step in (self.bridge.stop,
-                     lambda: self.rec_proc and self.rec_proc.stop(),
-                     self.headset_audio.close, self.stop_speaking, self.term.close, self.surfaces.stop):
-            try:
-                step()
-            except Exception as ex:  # noqa: BLE001
-                dbg(f"beenden: {ex!r}")
+        steps = [("Brücke", self.bridge.stop, 1),
+                 ("Aufnahme", lambda: self.rec_proc and self.rec_proc.stop(), 5),
+                 ("Wiedergabe", self.stop_speaking, 2),
+                 ("Headset", self.headset_audio.close, 10),
+                 ("Fenster", self.surfaces.stop, 3)]
+        if self.term.proc or self.has_terminal():
+            steps.append(("Terminal", self.term.close, 3))
+        for name, step, timeout in steps:
+            stop_with_timeout(name, step, timeout, dbg)
+
+
+def stop_with_timeout(name, step, timeout, log):
+    def run():
+        try:
+            step()
+        except Exception as ex:  # noqa: BLE001 – unabhängige Ressourcen weiter freigeben
+            log(f"Beenden {name}: {ex!r}")
+        else:
+            log(f"Beenden {name}: fertig")
+
+    log(f"Beenden {name}: startet")
+    worker = threading.Thread(target=run, name=f"stop-{name}", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        log(f"Beenden {name}: Zeitlimit nach {timeout}s")
 
 
 _LOCK = None
@@ -2973,7 +2994,11 @@ def main():
     app.setApplicationName("Walkie")
     app.setDesktopFileName("walkie")
     app.setQuitOnLastWindowClosed(False)
-    walkie = Walkie()
+    try:
+        walkie = Walkie()
+    except Exception as ex:  # noqa: BLE001 – auch gestartete native Threads zuverlässig beenden
+        dbg(f"Start fehlgeschlagen: {ex!r}")
+        os._exit(1)
     app.setWindowIcon(QIcon(walkie.anim.s.anims["Idle"].frame(0, 0)))   # Icon = die Figur
     walkie.show()
     app.aboutToQuit.connect(walkie.cleanup)
@@ -2983,8 +3008,11 @@ def main():
     code = app.exec()                       # aboutToQuit hat schon aufgeräumt (cleanup)
     # Hart beenden: Hintergrund-Threads fremder Bibliotheken (z. B. der Hotkey-Listener)
     # dürfen das Beenden nicht ewig aufhalten – genau das ist passiert.
-    sys.stdout.flush()
-    os._exit(code)
+    try:
+        if sys.stdout is not None:          # pythonw auf Windows hat keine Konsole
+            sys.stdout.flush()
+    finally:
+        os._exit(code)                      # Betriebssystem gibt auch das Instanz-Lock frei
 
 
 if __name__ == "__main__":

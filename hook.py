@@ -156,29 +156,48 @@ def server_info():
         return None
 
 
-def walkie_running():
-    """Läuft die App? Über ihren lokalen Dienst (alle Systeme), sonst über das Lock (POSIX)."""
+def acquire_lock():
+    """Einzige Instanz sicherstellen: offenes Lock-Handle oder None (schon belegt)."""
+    f = open(LOCK, "a+", encoding="ascii")
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
+def bridge_ready():
     info = server_info()
     if info:
+        from http.client import HTTPException
         import urllib.request
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{info['port']}/health", timeout=1.5):
-                return True
-        except Exception:  # noqa: BLE001 – veraltete server.json
-            pass
-    try:
-        import fcntl
-    except ImportError:
-        return False
-    try:
-        with open(LOCK, "a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(f, fcntl.LOCK_UN)
-            return False
-    except BlockingIOError:
+            with urllib.request.urlopen(f"http://127.0.0.1:{info['port']}/health", timeout=1.5) as r:
+                return json.load(r).get("ok") is True
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, HTTPException):
+            pass                              # z. B. veraltete server.json
+    return False
+
+
+def walkie_running():
+    """Der Dienst antwortet oder eine Instanz hält das Lock beim Start/Herunterfahren."""
+    if bridge_ready():
         return True
+    try:
+        lock = acquire_lock()
     except OSError:
         return False
+    if lock is None:
+        return True
+    lock.close()
+    return False
 
 
 def autostart():
@@ -417,20 +436,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-def acquire_lock():
-    """Einzige Instanz sicherstellen: offenes Lock-Handle oder None (schon belegt)."""
-    f = open(LOCK, "a+")
-    try:
-        if sys.platform == "win32":
-            import msvcrt
-            f.seek(0)
-            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        f.close()
-        return None
-    return f

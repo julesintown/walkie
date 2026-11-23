@@ -19,7 +19,7 @@ class VoicemicTest(unittest.TestCase):
     def test_piped_helper_becomes_a_valid_wav(self):
         tmp = Path(tempfile.mkdtemp())
         exe = tmp / "voicemic"
-        exe.write_text("#!/bin/sh\nexec head -c 32000 /dev/zero\n")   # 1 s Stille, 16 kHz s16
+        exe.write_text("#!/bin/sh\nexec head -c 32000 /dev/zero\n", encoding="utf-8")   # 1 s Stille, 16 kHz s16
         exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
         wav = tmp / "rec.wav"
         with mock.patch.object(audio.sys, "platform", "darwin"), \
