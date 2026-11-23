@@ -111,6 +111,13 @@ def main(argv=None):
                  f"Agent '{agent.name}': {exe} fehlt – für Gespräche mit diesem Agent installieren")
         for state, text in agent.doctor():
             line(state, text)
+        caps = agent.capabilities()
+        if caps:
+            print(f"      kann: {', '.join(caps)}")
+        import router
+        brains = router.brains()
+        line(True if brains else None, "Denkmodell: " + (", ".join(brains) if brains else
+             "keins (claude, codex, agy oder gemini) – Routing nur nach Namen"))
     except RuntimeError as ex:
         line(False, str(ex))
     line(True if RUN.exists() else None, f"Statusordner: {RUN}"

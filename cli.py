@@ -18,6 +18,7 @@
   walkie drafts [clear]           ausstehende oder unbestätigte Diktate lesen (clear: löschen)
   walkie sessions                 welche Claude-Sessions der Walkie gerade kennt
   walkie missed [--speak]         was habe ich verpasst? Überblick über alle Sessions
+  walkie agents                   welcher Agent was mit dem Walkie kann
   walkie start | stop | restart | status | gui
   walkie agent-guide              Anleitung für KI-Agents (Claude, Codex, Gemini …)
 
@@ -662,6 +663,13 @@ def cmd_sessions(_args):
               f"{dim((s.get('prompt') or '')[:60])}")
 
 
+def cmd_agents(_args):
+    """Welcher Agent kann was mit dem Walkie (adapters.py)?"""
+    import adapters
+    print(adapters.matrix())
+    print(dim(f"\nHauptagent: {S.get('WALKIE_AGENT')} · Zweitagent: {S.get('WALKIE_AGENT_2')}"))
+
+
 def cmd_missed(args):
     """Was habe ich verpasst? Überblick über alle Sessions (--speak: auch vorlesen)."""
     import urllib.request
@@ -913,7 +921,7 @@ COMMANDS = {
     "drafts": cmd_drafts,
     "settings": cmd_settings, "list": cmd_list, "get": cmd_get, "set": cmd_set,
     "reset": cmd_reset, "keys": cmd_keys, "voice": cmd_voice, "sprite": cmd_sprite,
-    "sessions": cmd_sessions, "missed": cmd_missed, "setup": cmd_setup, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart, "status": cmd_status,
+    "sessions": cmd_sessions, "missed": cmd_missed, "agents": cmd_agents, "setup": cmd_setup, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart, "status": cmd_status,
     "doctor": cmd_doctor, "gui": cmd_gui, "agent-guide": cmd_agent_guide,
 }
 

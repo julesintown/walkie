@@ -24,6 +24,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import adapters  # noqa: E402
 import settings  # noqa: E402
 HOOK = [sys.executable, str(HERE / "hook.py")]
 MARK = "walkie"
@@ -86,6 +87,15 @@ class Agent:
         """Kommandozeile für eine eigene, interaktive Session mit erstem Auftrag – oder None,
         wenn der Agent das nicht kann."""
         return None
+
+    @property
+    def adapter(self):
+        """Was der Walkie mit diesem Agent kann (adapters.py)."""
+        return adapters.get(self.name)
+
+    def capabilities(self):
+        a = self.adapter
+        return [label for cap, label in adapters.CAP_LABELS.items() if a and a.can(cap)]
 
     def doctor(self):
         """Liste (ok, Text) für `doctor.py`."""
@@ -219,8 +229,7 @@ class Gemini(GlobalHooks):
     Unsere Einträge erkennt man am Namen 'walkie'."""
     name, label = "gemini", "Gemini"
     FILE = Path.home() / ".gemini" / "settings.json"
-    EVENTS = ("SessionStart", "BeforeAgent", "AfterTool", "Notification", "AfterAgent",
-              "SessionEnd")
+    EVENTS = tuple(adapters.ADAPTERS["gemini"].event_map)
 
     def entries(self):
         cmd = shell_join(HOOK)

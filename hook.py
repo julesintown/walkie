@@ -48,10 +48,9 @@ VOICE_NOTE = ("(Diese Nachricht wurde per Mikrofon gesprochen – als gesprochen
 # Claude Code: Notification-Typen, bei denen "Du bist dran!" angezeigt wird.
 # permission_prompt fehlt absichtlich – das meldet schon PermissionRequest (sonst doppelt).
 ATTENTION_TYPES = {"agent_needs_input", "elicitation_dialog", "elicitation_url_dialog"}
-AGY_EVENTS = {"SessionStart": "ready", "PreInvocation": "prompt", "PostToolUse": "tool",
-              "Stop": "stop"}
-GEMINI_EVENTS = {"SessionStart": "ready", "BeforeAgent": "prompt", "AfterTool": "tool",
-                 "Notification": "attention", "AfterAgent": "stop", "SessionEnd": "end"}
+import adapters  # noqa: E402 – Ereignis-Übersetzung je Agent an einer Stelle
+AGY_EVENTS = adapters.ADAPTERS["antigravity"].event_map
+GEMINI_EVENTS = adapters.ADAPTERS["gemini"].event_map
 
 
 # ------------------------------------------------------------------ Transcripts
