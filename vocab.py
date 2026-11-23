@@ -158,12 +158,27 @@ def _match(chunk, cands, fuzzy, threshold):
     return best
 
 
+DOT = re.compile(r"\b([\w-]+)\s+(?:dot|punkt|point)\s+([a-z]{1,5})\b", re.I)
+
+
+def spoken_dots(text, found):
+    """„router dot ts“ / „router punkt py“ -> router.ts – nur, wenn es die Datei gibt
+    (Idee aus parlar)."""
+    names = {t.canonical.lower(): t.canonical for t in found if "." in t.canonical}
+
+    def sub(m):
+        name = f"{m.group(1)}.{m.group(2)}".lower()
+        return names.get(name, m.group(0))
+    return DOT.sub(sub, text)
+
+
 def correct(text, found, threshold=0.86):
     """Gehörte Wortfolgen durch Bezeichner ersetzen – nur, wenn sie (fast) genau so klingen
     wie ein mehrteiliger Bezeichner. Exakte Treffer zuerst; unscharfe nur, wenn die Wortfolge
     nicht mit einem Füllwort beginnt oder endet. Einzelne Allerweltswörter bleiben stehen."""
     if not text or not found:
         return text
+    text = spoken_dots(text, found)
     cands = {}
     for t in found:
         key = _letters(t.spoken)

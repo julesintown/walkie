@@ -41,6 +41,7 @@ def transcribe(model, wav, hint=None):
                                **kw)
     text = " ".join(s.text.strip() for s in segs).strip()
     text = re.sub(r"\s*[\[(][^\])]{1,30}[\])]\s*", " ", text).strip()   # [Musik], (Stille) – aus VoiceMode
+    text = re.sub(r"\s*(\*[^*]{1,30}\*|♪[^♪]*♪?)\s*", " ", text).strip()  # *lacht*, ♪ … ♪ – aus VoiceTerm
     text = re.sub(r"\b((?:\w+\W+){0,2}?\w+)(?:[,.!]?\s+\1\b)+", r"\1", text, flags=re.I)
     if hint and len(hint) > 1 and text.rstrip(".") == kw["initial_prompt"].rstrip("."):
         return ""                                  # Stille: Whisper wiederholt nur den Hinweis

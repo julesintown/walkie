@@ -35,6 +35,12 @@ class Correct(unittest.TestCase):
         self.assertEqual(vocab.correct("open the setings gui now", TERMS),
                          "open the settings_gui.py now")
 
+    def test_spoken_dot_only_for_existing_files(self):
+        self.assertEqual(vocab.correct("open router dot py please", TERMS),
+                         "open router.py please")
+        self.assertEqual(vocab.correct("öffne router punkt py", TERMS), "öffne router.py")
+        self.assertEqual(vocab.correct("open shop dot js", TERMS), "open shop dot js")
+
     def test_split_words(self):
         self.assertEqual(vocab.split_words("authMiddleware"), "auth middleware")
         self.assertEqual(vocab.split_words("HTTPServer_v2"), "http server v2")
