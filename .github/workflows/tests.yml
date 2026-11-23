@@ -107,6 +107,13 @@ jobs:
           python cli.py stop
           python -c "from hook import SERVER, acquire_lock; assert not SERVER.exists(); lock = acquire_lock(); assert lock is not None; lock.close()"
         shell: bash
+      - name: Thread-Stacks des hängenden Begleiters sichern (macOS)
+        if: failure() && runner.os == 'macOS'
+        run: |
+          walkie_pid=$(python -c "from hook import LOCK; print(int(LOCK.read_text(encoding='ascii')))")
+          if kill -0 "$walkie_pid" 2>/dev/null; then
+            sample "$walkie_pid" 2 -file walkie-stacks.txt
+          fi
       - name: Prozessstatus sichern (Linux/macOS)
         if: failure() && runner.os != 'Windows'
         run: ps -A -o pid,ppid,stat,comm > walkie-processes.txt
@@ -120,3 +127,4 @@ jobs:
           path: |
             run/walkie.log
             walkie-processes.txt
+            walkie-stacks.txt
