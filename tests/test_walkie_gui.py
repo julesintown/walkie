@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -597,12 +598,25 @@ class WalkieTest(unittest.TestCase):
             b.bridge.take_inbox("R1")
             ev.router.understand = lambda text, sessions, **k: ("self", None, text)
             ev.router.ask_self = lambda text, *a, **k: "Es ist drei Uhr."
-            b.talk_pipeline(str(TMP / "nichts.wav"))
+            with patch.object(ev.router, "brains", return_value=["claude"]):
+                b.talk_pipeline(str(TMP / "nichts.wav"))
             self.assertEqual(b.say_q.get_nowait(), "Moment, ich schaue nach.")
             self.assertEqual(b.say_q.get_nowait(), "Es ist drei Uhr.")
         finally:
             ev.transcribe, ev.router.understand, ev.router.ask_self = old
             b.bridge.events.queue.clear()
+
+    def test_without_any_brain_a_session_opens_instead_of_silence(self):
+        """Weder claude, codex, agy noch gemini: der Satz geht als Auftrag an eine neue Session."""
+        b, ev = self.b, self.ev
+        opened = []
+        with patch.object(ev, "transcribe", lambda model, wav, hint=None: "Wie spät ist es?"), \
+                patch.object(ev.router, "understand", lambda text, sessions, **k: ("self", None, text)), \
+                patch.object(ev.router, "brains", return_value=[]), \
+                patch.object(ev.Walkie, "has_terminal", lambda self: False), \
+                patch.object(b, "open_new_session", lambda text, **k: opened.append((text, k))):
+            b.talk_pipeline(str(TMP / "nichts.wav"))
+        self.assertEqual(opened, [("Wie spät ist es?", {"agent": ev.S.get("WALKIE_AGENT")})])
 
     def test_mic_lost_during_recording_recovers(self):
         """Kopfhörer weg mitten in der Aufnahme: Abbruch, Ansage, wieder bereit – kein Hänger."""

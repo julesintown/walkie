@@ -97,7 +97,8 @@ cd walkie
 ./install.sh
 ```
 
-Unter Windows im geklonten Ordner `bin\walkie.cmd setup` ausführen. Die Einrichtung lädt bei Bedarf
+Unter Windows im geklonten Ordner `bin\walkie.cmd setup` ausführen. Danach startest du ihn jederzeit einfach mit `walkie`
+(beim ersten Mal richtet das Walkie auch ein). Die Einrichtung lädt bei Bedarf
 Python über [uv](https://github.com/astral-sh/uv). Später startet `walkie start` die Figur erneut.
 Unter Linux/macOS funktioniert im Repo auch `./bin/walkie start`, unter Windows `bin\walkie.cmd start`.
 
