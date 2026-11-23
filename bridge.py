@@ -45,6 +45,7 @@ class Bridge:
         self.lock = threading.Lock()
         self.httpd = None
         self.on_quit = None
+        self.on_digest = None             # -> Text „Was habe ich verpasst?“ (GET /digest)
         self.saved = 0.0
         self._load()                   # vom Begleiter gesetzt: sauber beenden
 
@@ -83,6 +84,9 @@ class Bridge:
                     return self._reply(200, {"ok": True})
                 if not self._auth():
                     return
+                if url.path == "/digest" and bridge.on_digest:
+                    speak = parse_qs(url.query).get("speak") == ["1"]
+                    return self._reply(200, {"text": bridge.on_digest(speak)})
                 if url.path == "/sessions":
                     return self._reply(200, {"sessions": bridge.active_sessions()})
                 if url.path == "/inbox":

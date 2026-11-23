@@ -247,6 +247,20 @@ class WalkieTest(unittest.TestCase):
         b.decide_newest("allow")
         self.assertEqual(written, [("r1", {"behavior": "allow"})])
 
+    def test_what_did_i_miss(self):
+        import queue
+        b = self.b
+        b.say_q = queue.Queue()
+        b.seen_ts = 0
+        b.handle_event({"event": "stop", "session": "M1", "project": "dashboard",
+                        "text": "Die Tests sind durch."})
+        text = b.missed(speak=True)
+        self.assertIn("dashboard ist fertig", text)
+        self.assertIn("Die Tests sind durch.", text)
+        self.assertEqual(b.say_q.get_nowait(), text)
+        self.assertIn("Nichts Neues", b.missed(), "danach gilt alles als gehört")
+        b.bridge.events.queue.clear()
+
     def test_critical_command_needs_the_spoken_code(self):
         from unittest.mock import patch
         b = self.b

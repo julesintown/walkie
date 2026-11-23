@@ -34,7 +34,7 @@ GROUPS = {
 DEFAULT_KEYS = {
     "PLAYPAUSE": {"press": "talk"},
     "NEXTSONG": {"press": "media_toggle"},
-    "PREVIOUSSONG": {"press": "media_toggle", "double": "repeat"},
+    "PREVIOUSSONG": {"press": "media_toggle", "double": "repeat", "long": "missed"},
 }
 
 

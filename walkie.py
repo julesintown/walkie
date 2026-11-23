@@ -770,6 +770,7 @@ class Walkie(QWidget):
         self.bridge = Bridge(str(RUN), ask_wait=lambda: S.get("WALKIE_ASK_WAIT"))
         self.bus.quit.connect(QApplication.instance().quit, Qt.ConnectionType.QueuedConnection)
         self.bridge.on_quit = self.bus.quit.emit
+        self.bridge.on_digest = self.missed
         self.look = (S.sprite_dir(), S.get("WALKIE_SCALE"))
         self.anim = Animator(SpriteSet(*self.look))
 
@@ -785,6 +786,9 @@ class Walkie(QWidget):
         self.expect_voice = False
         self.codex_turns = {}
         self.sessions = {}            # id -> {"state", "ts", "since", "agent"}
+        import digest
+        self.timeline = digest.Timeline()     # für „Was habe ich verpasst?“
+        self.seen_ts = time.time()
         self.view = "idle"            # angezeigter Zustand (lokal + Sessions)
         self.say_q = speechq.SpeechQueue()    # mit Vorrang statt stur der Reihe nach
         self.mic_taken = False                # andere App nimmt auf (Telefonat, Diktat)
@@ -1500,12 +1504,33 @@ class Walkie(QWidget):
         elif action == "show":
             self.in_thread(beep, "click")
             self.in_thread(self.raise_session, self.current_session())
+        elif action == "missed":
+            self.in_thread(beep, "click")
+            self.in_thread(self.missed, True)
         elif action == "media_toggle":
             self.in_thread(media_playpause)
         elif action == "media_next":
             self.in_thread(media_skip, "Next")
         elif action == "media_prev":
             self.in_thread(media_skip, "Previous")
+
+    def missed(self, speak=False):
+        """„Was habe ich verpasst?“: alles seit dem letzten Überblick, Dringendes zuerst."""
+        import digest
+        now = time.time()
+        waiting = {}
+        for p in list(self.pending.values()):
+            if p.get("session") and p.get("kind") != "route":
+                waiting.setdefault(p["session"], render(p.get("reason") or p.get("prompt") or ""))
+        known = self.bridge.active_sessions(max_age=12 * 3600)
+        names = {sid: s.get("project") for sid, s in known.items() if s.get("project")}
+        text = digest.summary(self.timeline.since(self.seen_ts), dict(self.sessions), waiting,
+                              now=now, lang=lang(), names=names)
+        self.seen_ts = now
+        dbg(f"verpasst: {text}")
+        if speak:
+            self.say_q.put(text)
+        return text
 
     def repeat_last(self):
         if self.state == "listening":
@@ -1999,6 +2024,7 @@ class Walkie(QWidget):
             self.codex_completed(ev, sid)
             return
         label = LABELS.get(ev.get("agent"), "Der Agent")
+        self.timeline.add(ev)
         dbg(f"ereignis {kind} {ev.get('project') or sid}"
             + (f" req={ev['req']}" if ev.get("req") else ""))
         if kind != "attention" or not ev.get("req"):
@@ -2287,6 +2313,11 @@ class Walkie(QWidget):
                 self.bus.state.emit("idle")
                 self.bus.action.emit("Cringe")
                 self.say_q.put(Speech("Hab nichts verstanden."))
+                return
+            import digest
+            if digest.is_request(text):                 # „Was habe ich verpasst?“
+                self.bus.state.emit("idle")
+                self.missed(speak=True)
                 return
             if cut:
                 self.say_q.put(Speech("Das Zeitlimit war erreicht, ich habe bis „{word}“ mitgeschrieben. Sag den Rest gleich nochmal.", word=text.split()[-1]))

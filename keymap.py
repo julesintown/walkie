@@ -14,6 +14,7 @@ ACTIONS = {
     "stop_speaking": "Vorlesen stoppen",
     "terminal": "Terminal zeigen",
     "show": "Fenster der Session nach vorne",
+    "missed": "Was habe ich verpasst?",
     "media_toggle": "Musik: Play/Pause",
     "media_next": "Musik: Vor",
     "media_prev": "Musik: Zurück",

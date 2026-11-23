@@ -17,6 +17,7 @@
   walkie doctor [--allow-missing-agent]     Installation und Agent prüfen
   walkie drafts [clear]           ausstehende oder unbestätigte Diktate lesen (clear: löschen)
   walkie sessions                 welche Claude-Sessions der Walkie gerade kennt
+  walkie missed [--speak]         was habe ich verpasst? Überblick über alle Sessions
   walkie start | stop | restart | status | gui
   walkie agent-guide              Anleitung für KI-Agents (Claude, Codex, Gemini …)
 
@@ -661,6 +662,21 @@ def cmd_sessions(_args):
               f"{dim((s.get('prompt') or '')[:60])}")
 
 
+def cmd_missed(args):
+    """Was habe ich verpasst? Überblick über alle Sessions (--speak: auch vorlesen)."""
+    import urllib.request
+
+    from hook import server_info
+    info = server_info()
+    if not info or not walkie_running():
+        die("Der Walkie läuft nicht: walkie start")
+    q = "?speak=1" if "--speak" in args else ""
+    req = urllib.request.Request(f"http://127.0.0.1:{info['port']}/digest{q}",
+                                 headers={"x-walkie-token": info["token"]})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        print(json.loads(r.read())["text"])
+
+
 def cmd_setup(args):
     """Alles in einem Schritt: Python-Umgebung, Pakete, Stimme, Whisper-Modell, starten.
     Läuft auf Linux, macOS und Windows; braucht keine Adminrechte."""
@@ -897,7 +913,7 @@ COMMANDS = {
     "drafts": cmd_drafts,
     "settings": cmd_settings, "list": cmd_list, "get": cmd_get, "set": cmd_set,
     "reset": cmd_reset, "keys": cmd_keys, "voice": cmd_voice, "sprite": cmd_sprite,
-    "sessions": cmd_sessions, "setup": cmd_setup, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart, "status": cmd_status,
+    "sessions": cmd_sessions, "missed": cmd_missed, "setup": cmd_setup, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart, "status": cmd_status,
     "doctor": cmd_doctor, "gui": cmd_gui, "agent-guide": cmd_agent_guide,
 }
 
