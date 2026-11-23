@@ -2,7 +2,9 @@
 
     python -m unittest discover -s tests -v
 """
-import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
+import os as _os, sys as _sys  # noqa: E401 – zuerst: nie in die echten Walkie-Ordner
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import isolate  # noqa: E402,F401
 import json
 import os
 import shutil

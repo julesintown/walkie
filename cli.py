@@ -927,6 +927,8 @@ COMMANDS = {
 
 
 def main(argv=None):
+    import crashguard
+    crashguard.safe_console()             # Windows-Konsole (cp1252): ✓ und „“ ohne Absturz
     argv = sys.argv[1:] if argv is None else argv
     # Plugin-Kopie im Claude-Cache -> an die echte Installation weiterreichen
     real = install_dir()

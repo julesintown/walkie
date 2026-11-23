@@ -338,11 +338,33 @@ def _codex(prompt, env, cwd, timeout, model):
         Path(out).unlink(missing_ok=True)
 
 
+NEWER_FLAGS = {"--tools": 1, "--no-session-persistence": 0}   # Flag -> Anzahl Werte
+
+
+def _without_newer_flags(args):
+    out, skip = [], 0
+    for a in args:
+        if skip:
+            skip -= 1
+            continue
+        if a in NEWER_FLAGS:
+            skip = NEWER_FLAGS[a]
+            continue
+        out.append(a)
+    return out
+
+
 def _claude(args, prompt, env, cwd, timeout):
     r = _run([brain_bin("claude"), "-p", *args], input=prompt, capture_output=True,
              timeout=timeout, env=env, cwd=cwd)
+    err = (r.stderr or r.stdout or "").strip()
+    if r.returncode != 0 and "unknown option" in err and _without_newer_flags(args) != args:
+        # ältere Claude-Code-Versionen (z. B. 1.0.x unter Windows) kennen nicht alle Flags
+        r = _run([brain_bin("claude"), "-p", *_without_newer_flags(args)], input=prompt,
+                 capture_output=True, timeout=timeout, env=env, cwd=cwd)
+        err = (r.stderr or r.stdout or "").strip()
     if r.returncode != 0:
-        raise RuntimeError((r.stderr or r.stdout).strip()[:200])
+        raise RuntimeError(err[:200])
     return r.stdout
 
 

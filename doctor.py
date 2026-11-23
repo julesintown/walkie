@@ -48,6 +48,8 @@ def headset_check(line):
 
 
 def main(argv=None):
+    import crashguard
+    crashguard.safe_console()             # Windows-Konsole (cp1252): ✓ und ✗ ohne Absturz
     parser = argparse.ArgumentParser(description="Walkie-Installation prüfen")
     parser.add_argument("--allow-missing-agent", action="store_true",
                         help="Eine fehlende Agent-CLI nur als Warnung melden")

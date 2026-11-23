@@ -1,5 +1,7 @@
 """Gesten-Erkennung der Kopfhörertasten (ohne Hardware)."""
-import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
+import os as _os, sys as _sys  # noqa: E401 – zuerst: nie in die echten Walkie-Ordner
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import isolate  # noqa: E402,F401
 import sys
 import unittest
 from pathlib import Path
@@ -175,3 +177,45 @@ class MacPauseTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreshInstallTest(unittest.TestCase):
+    def test_windows_gestures_exist_without_a_config_file(self):
+        """Ohne config.env ist settings.version() None; die Gesten müssen trotzdem entstehen."""
+        import types
+        from unittest.mock import patch
+
+        import keys
+        import settings as S
+        captured = {}
+
+        class FakeListener:
+            def __init__(self, win32_event_filter=None):
+                captured["filter"] = win32_event_filter
+                self.daemon = True
+
+            def start(self):
+                pass
+
+            def suppress_event(self):
+                pass
+
+        threads = []
+
+        class FakeThread:
+            def __init__(self, target=None, daemon=None):
+                threads.append(target)
+
+            def start(self):
+                pass
+        fake_pynput = types.SimpleNamespace(keyboard=types.SimpleNamespace(Listener=FakeListener))
+        emitted = []
+        with patch.dict(sys.modules, {"pynput": fake_pynput, "pynput.keyboard": fake_pynput.keyboard}), \
+                patch.object(S, "version", return_value=None), \
+                patch.object(keys.sys, "platform", "win32"), \
+                patch.object(keys.threading, "Thread", FakeThread), \
+                patch.object(keys.time, "sleep", side_effect=[None, StopIteration]):
+            self.assertTrue(keys.start_windows_media(emitted.append, lambda m: None))
+            with self.assertRaises(StopIteration):     # eine Runde poll(): kein AttributeError
+                threads[0]()
+

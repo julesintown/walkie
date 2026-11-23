@@ -1,5 +1,7 @@
 """Denkmodelle des Walkies: auch ohne Claude Code (z. B. nur agy unter Windows)."""
-import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
+import os as _os, sys as _sys  # noqa: E401 – zuerst: nie in die echten Walkie-Ordner
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import isolate  # noqa: E402,F401
 import os
 import subprocess
 import sys
@@ -46,6 +48,21 @@ class BrainOrder(unittest.TestCase):
                              "pong")
         self.assertEqual(seen["argv"], ["/bin/agy", "-p", "ping"])
         self.assertEqual(seen["env"]["WALKIE_HOOK_QUIET"], "1")
+
+    def test_old_claude_without_newer_flags(self):
+        calls = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            if "--tools" in argv:
+                return subprocess.CompletedProcess(argv, 1, stdout="",
+                                                   stderr="error: unknown option '--tools'")
+            return subprocess.CompletedProcess(argv, 0, stdout="pong", stderr="")
+        with patch("subprocess.run", fake_run), patch("shutil.which", which_only("claude")):
+            out = router._claude(["--model", "haiku", "--tools", "", "--no-session-persistence"],
+                                 "ping", {"PATH": "/bin"}, None, 5)
+        self.assertEqual(out, "pong")
+        self.assertEqual(calls[-1], ["/bin/claude", "-p", "--model", "haiku"])
 
     def test_no_brain_raises_readable_error(self):
         with patch("shutil.which", which_only()):

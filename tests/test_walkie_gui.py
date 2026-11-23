@@ -1,6 +1,8 @@
 """Begleiter-Logik offscreen mit synthetischer Mini-Figur (keine geschützten Grafiken nötig).
 Übersprungen, wenn PyQt6 fehlt."""
-import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
+import os as _os, sys as _sys  # noqa: E401 – zuerst: nie in die echten Walkie-Ordner
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import isolate  # noqa: E402,F401
 import json
 import os
 import shutil
@@ -1217,7 +1219,7 @@ class WalkieTest(unittest.TestCase):
         modules = {"faster_whisper": SimpleNamespace(WhisperModel=whisper),
                    "piper": SimpleNamespace(PiperVoice=Mock())}
         with (patch.dict(sys.modules, modules), patch.object(self.ev, "VOICE_DIR", TMP),
-              patch("fetch_assets.voices", fetch), patch.object(self.ev.time, "monotonic") as now):
+              patch("fetch_assets.fetch_voice", fetch), patch.object(self.ev.time, "monotonic") as now):
             now.return_value = 1
             self.load_whisper(b)
             self.set_voice(b, name)

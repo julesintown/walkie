@@ -13,9 +13,22 @@ import traceback
 _crash_file = None
 
 
+def safe_console():
+    """Windows-Konsolen (cp1252) und pythonw ohne Konsole: Ausgaben mit ✓, „“ oder Emoji
+    dürfen nie eine Exception auslösen – genau das verhinderte unter Windows das Laden der
+    Stimme („'charmap' codec can't encode character '\\u2713'“)."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def install(log, run_dir=None, notify=None):
     """log(text) protokolliert, notify(text) zeigt dem Nutzer einen kurzen Hinweis (optional)."""
     global _crash_file
+    safe_console()
     shown = set()
 
     def report(kind, exc_type, exc, tb):

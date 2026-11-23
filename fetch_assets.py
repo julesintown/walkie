@@ -72,6 +72,9 @@ def voices(which):
 
 
 if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):     # Windows-Konsole (cp1252): ✓ ohne Absturz
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(errors="replace")
     args = sys.argv[1:]
     if args[:1] == ["voices"]:
         voices(args[1:])

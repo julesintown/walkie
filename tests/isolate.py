@@ -14,3 +14,5 @@ for key, sub in (("WALKIE_RUN", "run"), ("WALKIE_CONFIG", "config.env"),
                  ("XDG_RUNTIME_DIR", "xdg"), ("WALKIE_SESSION_DIR", "sessions")):
     os.environ.setdefault(key, str(ROOT / sub))
 (ROOT / "xdg").mkdir(exist_ok=True)
+# Tests verändern nie die echte Lautstärke anderer Programme (ducking.py)
+os.environ.setdefault("WALKIE_DUCK", "100")

@@ -681,7 +681,7 @@ def headset_loop(bus, stop):
             if dev.name != announced:
                 announced = dev.name
                 notify(t("🎧 {name} verbunden", name=dev.name.removesuffix(' (AVRCP)')))
-            ver, gest, learn_g = None, None, None
+            ver, gest, learn_g = object(), None, None   # version() ist ohne Datei None
             while not stop.is_set():
                 if S.version() != ver:                  # Belegung live übernehmen
                     ver = S.version()
@@ -2982,7 +2982,7 @@ class Walkie(QWidget):
                     from piper import PiperVoice
                     if not path.is_file() or not path.with_suffix(".onnx.json").is_file():
                         import fetch_assets
-                        fetch_assets.voices([model])
+                        fetch_assets.fetch_voice(model)   # ohne Konsolenausgabe (Windows: cp1252)
                     voice = PiperVoice.load(str(path))
                 except Exception as ex:
                     self.failed_voice = name

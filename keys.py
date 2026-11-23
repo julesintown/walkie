@@ -53,7 +53,9 @@ def start_windows_media(emit, log):
     if sys.platform != "win32":
         return False
     from pynput import keyboard
-    state = {"ver": None, "g": None}
+    # eigener Startwert: ohne Konfigurationsdatei (frische Installation) ist version() None –
+    # mit None als Startwert entstanden die Gesten nie, und der Tasten-Thread starb
+    state = {"ver": object(), "g": None}
 
     def gestures():
         if S.version() != state["ver"]:
