@@ -25,6 +25,11 @@ listen briefly during playback.
 Permissions and questions: *"yes"*, *"no, use yarn instead"*, or just the name of an option.
 The normal dialog stays open in the terminal – whoever answers first wins.
 
+Risky commands are read aloud and need a second, clear yes. For **critical commands** – `rm -rf`,
+force pushes, production deploys, resetting a database or emptying tables, deleting
+infrastructure, publishing packages – a yes is not enough: Walkie names a code and you say
+*"confirm 42"*. A headphone button alone never approves them.
+
 ### 🧭 Just talk – it finds the right session
 Press Play and say what you want. The walkie sends it to the right Claude Code session – by
 project name, by topic, or the one you were just talking to – opens a new session for a project
@@ -35,6 +40,18 @@ session's window to the front.
 *"Tests are green. Should I commit?"* Walkie can shorten long answers for playback. Work reports
 stay brief, while explanations and suggestions keep their substance. You hear a session name
 when it helps distinguish conversations.
+
+*"What did I miss?"* (or hold Previous, or run `walkie missed`) sums up all sessions since your
+last overview: who is waiting for you, who is still working, who finished – and with what result.
+
+### 🎵 Music ducks instead of fighting
+While Walkie listens or speaks, Spotify and friends keep playing quieter (default 30 %) and return
+to exactly their previous volume afterwards. Linux via PipeWire/PulseAudio, Windows via audio
+sessions, macOS for Spotify and Music.
+
+### 📝 Knows your file names
+Walkie gives Whisper the files of your running sessions as context (recently changed first) and
+carefully corrects afterwards: *"fix the bug in auth middleware"* arrives as `auth_middleware.py`.
 
 ### 🦊 It lives on your desktop
 Drop it and it falls onto the window below. It walks along window edges and rides along when you
@@ -115,7 +132,8 @@ Claude dictation, the command shows the path to the recording.
 |---|---|
 | **Linux – KDE Plasma** (Wayland/X11, PipeWire) | developed and used daily |
 | **Linux – GNOME and others** | should work; window edges only on X11 with `wmctrl`, no "show me that" on GNOME Wayland |
-| **Windows 10/11** | experimental – not yet tested on real hardware; headphone keys via media keys |
+| **Windows 10/11** | test suite, start/stop, music ducking and thinking models (`claude`, `agy`) checked on Windows 11; headphone keys via media keys |
+| **WSL2 (WSLg)** | works; `walkie setup` installs missing Qt system libraries (e.g. `libxcb-icccm4`, `libxcb-keysyms1`) |
 | **macOS** | experimental – not yet tested on real hardware; needs microphone and accessibility permissions |
 
 Linux note: reading the headphone keys needs a one-time permission – one click on *Unlock buttons*
@@ -123,6 +141,13 @@ in the first-steps page (your system asks for your password; or `walkie keys unl
 makes the headphones' key device readable for you (`extras/udev/70-walkie-avrcp.rules`).
 Until then, click the figure or use the hotkey. On Wayland the global hotkey only works while an X11 window has focus – the
 headphone keys are the better path there.
+
+**Agents:** `walkie agents` shows what Walkie can do with Claude Code, Codex, Antigravity, Gemini
+CLI or a custom command. Without Claude Code, Walkie thinks with whatever is installed (`codex`,
+`agy -p`, `gemini -p`), so voice chat also works with only Antigravity.
+
+**Download size:** about 200 MB of packages (Qt, ONNX, Whisper runtime), one voice (~60 MB) and
+the Whisper model "base" (~140 MB). Other voices download only when you pick them.
 
 ## How it works
 

@@ -26,6 +26,11 @@ Mit „Unterbrechen durch Reden“ kann Walkie auch während der Wiedergabe kurz
 Freigaben und Rückfragen: *„ja“*, *„nein, nimm lieber yarn“* oder einfach der Name einer Option.
 Der normale Dialog im Terminal bleibt offen – wer zuerst antwortet, gewinnt.
 
+Riskantes liest Walkie vor und will ein zweites, klares Ja. Bei **kritischen Befehlen** –
+`rm -rf`, Force-Push, Deploys in die Produktion, Datenbank zurücksetzen oder Tabellen leeren,
+Infrastruktur löschen, Pakete veröffentlichen – reicht kein „ja“: Walkie nennt einen Code, und du
+sagst *„Bestätige 42“*. Per Kopfhörertaste allein wird so etwas nie freigegeben.
+
 ### 🧭 Einfach reden – er findet die richtige Session
 Play drücken und sagen, was du willst. Der Walkie schickt es an die passende Claude-Code-Session –
 nach Projektname, nach Thema oder an die, mit der du gerade gesprochen hast –, öffnet eine neue
@@ -36,6 +41,20 @@ Session für ein Projekt, das noch nicht läuft, oder beantwortet kleine Fragen 
 *„Die Tests sind grün. Soll ich committen?“* Walkie kann lange Antworten fürs Vorlesen kürzen.
 Arbeitsberichte bleiben knapp, bei Erklärungen und Vorschlägen soll der Inhalt erhalten bleiben.
 Den Session-Namen hörst du, wenn mehrere Gespräche auseinanderzuhalten sind.
+
+*„Was habe ich verpasst?“* (oder Zurück-Taste lang halten, oder `walkie missed`) fasst alle
+Sessions seit dem letzten Überblick zusammen: wer auf dich wartet, wer noch arbeitet, wer
+fertig ist – und mit welchem Ergebnis.
+
+### 🎵 Musik wird leiser, nicht lauter
+Solange Walkie zuhört oder spricht, laufen Spotify & Co. leiser weiter (Standard: 30 %) und
+danach wieder genau so laut wie vorher. Linux über PipeWire/PulseAudio, Windows über die
+Audiositzungen, macOS für Spotify und Musik.
+
+### 📝 Versteht deine Dateinamen
+Walkie gibt Whisper die Dateien deiner laufenden Sessions als Kontext (zuletzt geänderte zuerst)
+und korrigiert danach vorsichtig: *„Fix den Fehler in auth middleware“* kommt als
+`auth_middleware.py` an.
 
 ### 🦊 Er wohnt auf deinem Desktop
 Loslassen, und er fällt aufs Fenster darunter. Er läuft auf Fensterkanten und fährt mit, wenn du
@@ -116,7 +135,8 @@ Bei einer unbestätigten Übergabe im nativen Claude-Diktat zeigt der Befehl den
 |---|---|
 | **Linux – KDE Plasma** (Wayland/X11, PipeWire) | entwickelt und täglich im Einsatz |
 | **Linux – GNOME und andere** | sollte laufen; Fensterkanten nur unter X11 mit `wmctrl`, kein „Zeig mir das“ unter GNOME-Wayland |
-| **Windows 10/11** | experimentell – noch nicht auf echter Hardware getestet; Kopfhörertasten über Medientasten |
+| **Windows 10/11** | Testsuite, Start/Stopp, Musik leiser und Denkmodelle (`claude`, `agy`) unter Windows 11 geprüft; Kopfhörertasten über Medientasten |
+| **WSL2 (WSLg)** | läuft; fehlende Qt-Systembibliotheken (z. B. `libxcb-icccm4`, `libxcb-keysyms1`) installiert `walkie setup` mit |
 | **macOS** | experimentell – noch nicht auf echter Hardware getestet; braucht Freigaben für Mikrofon und Bedienungshilfen |
 
 Linux: Die Kopfhörertasten zu lesen braucht einmalig eine Freigabe – ein Klick auf *Tasten
@@ -124,6 +144,13 @@ freischalten* in „Erste Schritte“ (das System fragt nach deinem Passwort; od
 unlock`). Sie macht nur das Tasten-Gerät des Kopfhörers für dich lesbar
 (`extras/udev/70-walkie-avrcp.rules`). Bis dahin: Klick auf die Figur oder der Hotkey. Unter Wayland greift der globale Hotkey nur, solange ein X11-Fenster den Fokus hat –
 dort sind die Kopfhörertasten der bessere Weg.
+
+**Agents:** `walkie agents` zeigt, was Walkie mit Claude Code, Codex, Antigravity, Gemini CLI
+oder einem eigenen Befehl kann. Ohne Claude Code denkt Walkie mit dem, was installiert ist
+(`codex`, `agy -p`, `gemini -p`) – so funktioniert der Sprachchat z. B. auch mit nur Antigravity.
+
+**Download-Größe:** rund 200 MB Pakete (Qt, ONNX, Whisper-Laufzeit), dazu eine Stimme (~60 MB)
+und das Whisper-Modell „base“ (~140 MB). Weitere Stimmen lädt Walkie erst, wenn du sie wählst.
 
 ## So funktioniert es
 

@@ -17,3 +17,7 @@ absoluten Pfad. Verwende denselben Starter für die weiteren Befehle.
    Bei fehlenden Paketen verwende `walkie setup`. Das richtet Walkie ein und startet ihn.
 3. Bei fertiger Installation führe `walkie start` aus und prüfe mit `walkie status`.
 4. Einstellungen lassen sich mit `walkie gui` öffnen.
+5. Meldet `walkie setup` oder `walkie doctor` fehlende Systembibliotheken (Linux, z. B. unter
+   WSL: `libxcb-icccm4`, `libxcb-keysyms1`), zeige dem Nutzer den ausgegebenen
+   `sudo apt-get install …`-Befehl und bitte ihn, ihn einmal im Terminal auszuführen
+   (Passwort nötig). Führe danach `walkie start` aus.
