@@ -1,5 +1,6 @@
 """Ein Adapter je Agent: Ereignis-Übersetzung und Fähigkeiten an einer Stelle."""
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -9,7 +10,6 @@ os.environ.setdefault("WALKIE_CONFIG", str(Path(tempfile.mkdtemp()) / "config.en
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import adapters  # noqa: E402
 import agents  # noqa: E402
-import hook  # noqa: E402
 
 
 class AdapterTest(unittest.TestCase):
@@ -26,7 +26,14 @@ class AdapterTest(unittest.TestCase):
 
     def test_hook_uses_the_adapter_tables(self):
         self.assertEqual(adapters.get("agy").normalize("PreInvocation"), "prompt")
-        self.assertIs(hook.GEMINI_EVENTS, adapters.ADAPTERS["gemini"].event_map)
+        # hook.py im eigenen Prozess: sein Statusordner (RUN) wird beim Import festgelegt
+        code = ("import adapters, hook; assert hook.GEMINI_EVENTS is "
+                "adapters.ADAPTERS['gemini'].event_map; assert hook.AGY_EVENTS is "
+                "adapters.ADAPTERS['antigravity'].event_map")
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                           cwd=str(Path(__file__).resolve().parent.parent),
+                           env=dict(os.environ, WALKIE_RUN=tempfile.mkdtemp()))
+        self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(agents.Gemini.EVENTS, tuple(adapters.ADAPTERS["gemini"].event_map))
 
     def test_matrix_lists_all_agents(self):
