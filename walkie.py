@@ -81,7 +81,7 @@ SLEEP_AFTER = 180                    # Sekunden ohne Aktivität -> einschlafen
 
 VOICE_DIR = HERE / "voices"
 VOICES = S.VOICES                # Name im Menü -> (Modelldatei, Aussprache)
-DEFAULT_VOICE = S.DEFAULT_VOICE
+MODEL_RETRY_SECONDS = 300
 # Agent-Zustand aus den Sessions: höchste Priorität gewinnt
 EVENT_STATE = {"ready": "idle", "prompt": "thinking", "tool": "thinking",
                "attention": "attention", "error": "error", "stop": "idle"}
@@ -771,8 +771,6 @@ class Walkie(QWidget):
         self.bus.listen_go.connect(self.listen_when_ready)
         self.bus.mic_ready.connect(lambda a: self.start_listening(*a, prepared=True))
         self.tray = None
-        if not LINUX:
-            self.setup_tray()
         self.pending = {}             # req -> offene Freigabe/Rückfrage einer Session
         self.answer_req = None        # gerade wird die Antwort auf diese Anfrage aufgenommen
         self.answer_done = threading.Event()
@@ -831,8 +829,12 @@ class Walkie(QWidget):
         self.rec_file = None
         self.play_proc = None
         self.whisper = None
+        self.whisper_loading = True     # Start-Thread übernimmt den ersten Versuch
+        self.whisper_retry_at = 0.0
         self.piper = None
         self.voice_name = None
+        self.failed_voice = None
+        self.voice_retry_at = 0.0
         self.voice_lock = threading.Lock()
         self.ui_language = lang()
         self.settings_win = None
@@ -867,6 +869,8 @@ class Walkie(QWidget):
         self.rec_limit = QTimer(self, singleShot=True, timeout=self.stop_listening)
         self.level_timer = QTimer(self, timeout=self.check_silence)
         self.click_timer = QTimer(self, singleShot=True, timeout=self.on_click)
+        if not LINUX:
+            self.setup_tray()
         threading.Thread(target=self.load_whisper, daemon=True).start()
         try:
             dbg(f"brücke auf port {self.bridge.start()}")
@@ -1484,8 +1488,8 @@ class Walkie(QWidget):
             self.in_thread(self.set_voice, name)
         if not self.wander:
             self.target_x = None
-        if self.whisper is None and not getattr(self, "whisper_loading", True) \
-                and self.need_whisper():
+        if (self.whisper is None and not self.whisper_loading
+                and time.monotonic() >= self.whisper_retry_at and self.need_whisper()):
             self.whisper_loading = True               # Sprach-Antworten erst jetzt eingeschaltet
             self.in_thread(self.load_whisper)
 
@@ -1628,7 +1632,10 @@ class Walkie(QWidget):
         self.answer_req = answer
         if (answer or STT_MODE != "claude") and self.whisper is None:
             self.in_thread(beep, "busy")
-            notify(t("Ich wache gerade noch auf – Spracherkennung lädt …"))
+            if time.monotonic() < self.whisper_retry_at:
+                notify(t("Spracherkennung nicht verfügbar. Bitte die Modelldateien mit walkie setup prüfen."))
+            else:
+                notify(t("Ich wache gerade noch auf – Spracherkennung lädt …"))
             self.action = "LookUp"
             return
         if STT_MODE == "claude" and not answer and not (self.term.running()
@@ -2884,17 +2891,17 @@ class Walkie(QWidget):
             self.play_proc.abort()
 
     def load_whisper(self):
-        from faster_whisper import WhisperModel
-        name = S.get("WALKIE_VOICE")
-        if self.voice_name is None:
-            self.set_voice(name if name in VOICES else DEFAULT_VOICE)
-        if not self.need_whisper() or self.whisper is not None:
-            self.whisper_loading = False
-            return
-        self.whisper_loading = True
         try:
+            if not self.need_whisper() or self.whisper is not None:
+                return
+            from faster_whisper import WhisperModel
             self.whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8",
                                         cpu_threads=os.cpu_count() or 4)
+            self.whisper_retry_at = 0.0
+        except Exception as ex:
+            self.whisper_retry_at = time.monotonic() + MODEL_RETRY_SECONDS
+            dbg(f"Whisper ({WHISPER_MODEL}) konnte nicht geladen werden: {ex!r}. "
+                f"Nächster Versuch in {MODEL_RETRY_SECONDS} s.")
         finally:
             self.whisper_loading = False
 
@@ -2909,19 +2916,23 @@ class Walkie(QWidget):
         return S.get("WALKIE_VOICE_REPLY" if p.get("kind") == "reply" else "WALKIE_VOICE_ANSWER")
 
     def set_voice(self, name, demo=False):
-        from piper import PiperVoice
         model, phon = VOICES[name]
         path = VOICE_DIR / f"{model}.onnx"
         with self.voice_lock:
             if name != S.get("WALKIE_VOICE"):
                 return
             if name != self.voice_name:
+                if not demo and name == self.failed_voice and time.monotonic() < self.voice_retry_at:
+                    return
                 try:
+                    from piper import PiperVoice
                     if not path.is_file() or not path.with_suffix(".onnx.json").is_file():
                         import fetch_assets
                         fetch_assets.voices([model])
                     voice = PiperVoice.load(str(path))
                 except Exception as ex:
+                    self.failed_voice = name
+                    self.voice_retry_at = time.monotonic() + MODEL_RETRY_SECONDS
                     notify(t("Stimme konnte nicht geladen werden: {error}", error=ex))
                     return
                 if name != S.get("WALKIE_VOICE"):
@@ -2929,6 +2940,7 @@ class Walkie(QWidget):
                 if phon:
                     voice.config.espeak_voice = phon
                 self.piper, self.voice_name = voice, name
+                self.failed_voice = None
         if demo:
             self.stop_speaking()
             self.speak(t("Hallo, so klinge ich jetzt."))

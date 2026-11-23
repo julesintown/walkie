@@ -66,6 +66,8 @@ class WalkieTest(unittest.TestCase):
         (TMP / "run" / "welcomed").write_text("1", encoding="utf-8")   # Ersteinrichtung nicht automatisch öffnen
         import walkie as bmod
         cls.ev = bmod
+        cls.load_whisper = staticmethod(bmod.Walkie.load_whisper)
+        cls.set_voice = staticmethod(bmod.Walkie.set_voice)
         cls.notes = []
         bmod.notify = cls.notes.append
         bmod.media_tracker = lambda: None
@@ -129,6 +131,20 @@ class WalkieTest(unittest.TestCase):
         self.b.step()
         self.b.grab()                       # paintEvent einmal durchlaufen
         return self.b.view
+
+    def test_available_desktop_tray_has_sprite_icon_at_startup(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QSystemTrayIcon
+        with (patch.object(self.ev, "LINUX", False), patch.object(self.ev, "NOTIFIER"),
+              patch.object(self.ev.Bridge, "start"), patch.object(QSystemTrayIcon, "show"),
+              patch.object(QSystemTrayIcon, "isSystemTrayAvailable", return_value=True)):
+            desktop = self.ev.Walkie()
+            try:
+                self.assertFalse(desktop.tray.icon().isNull())
+                self.assertIs(desktop.tray.contextMenu(), desktop.tray_menu)
+            finally:
+                desktop.device_stop.set()
+                desktop.deleteLater()
 
     def test_priority_across_sessions(self):
         self.assertEqual(self.view(), "idle")
@@ -1152,6 +1168,36 @@ class WalkieTest(unittest.TestCase):
             self.assertTrue(h.match(t), t)
         for t in ("Danke, mach weiter mit Tests", "Mach das Fenster zu"):
             self.assertFalse(h.match(t), t)
+
+    def test_missing_models_do_not_retry_each_tick_or_announcement(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        b = self.b
+        name = self.ev.S.get("WALKIE_VOICE")
+        b.need_whisper = lambda: True
+        b.requested_voice = name
+        b.in_thread = Mock()
+        whisper = Mock(side_effect=OSError("offline"))
+        fetch = Mock(side_effect=OSError("offline"))
+        modules = {"faster_whisper": SimpleNamespace(WhisperModel=whisper),
+                   "piper": SimpleNamespace(PiperVoice=Mock())}
+        with (patch.dict(sys.modules, modules), patch.object(self.ev, "VOICE_DIR", TMP),
+              patch("fetch_assets.voices", fetch), patch.object(self.ev.time, "monotonic") as now):
+            now.return_value = 1
+            self.load_whisper(b)
+            self.set_voice(b, name)
+            now.return_value = 2
+            b.apply_settings()
+            self.set_voice(b, name)
+            b.in_thread.assert_not_called()
+            whisper.assert_called_once()
+            fetch.assert_called_once()
+            now.return_value += self.ev.MODEL_RETRY_SECONDS
+            b.apply_settings()
+            b.in_thread.assert_called_once_with(b.load_whisper)
+            self.set_voice(b, name)
+            self.assertEqual(fetch.call_count, 2)
 
     def test_headset_detection(self):
         ev = self.ev
