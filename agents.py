@@ -187,7 +187,7 @@ class Antigravity(GlobalHooks):
     FILE = Path.home() / ".gemini" / "config" / "hooks.json"
 
     def entries(self):
-        cmd = " ".join(shlex.quote(p) for p in HOOK)
+        cmd = shell_join(HOOK)
         out = {}
         for ev in ("SessionStart", "PreInvocation", "Stop"):
             out[ev] = [{"type": "command", "command": f"{cmd} agy {ev}", "timeout": 10}]
@@ -206,6 +206,9 @@ class Antigravity(GlobalHooks):
     def binary(self):
         return os.environ.get("WALKIE_AGY_BIN", "agy")
 
+    def new_session(self, task):
+        return [self.binary(), "--prompt-interactive", task]
+
     def command(self):
         self.install_hooks()
         return [self.binary()]
@@ -220,7 +223,7 @@ class Gemini(GlobalHooks):
               "SessionEnd")
 
     def entries(self):
-        cmd = " ".join(shlex.quote(p) for p in HOOK)
+        cmd = shell_join(HOOK)
         return {ev: {"hooks": [{"type": "command", "name": MARK,
                                 "command": f"{cmd} gemini {ev}", "timeout": 5000}]}
                 for ev in self.EVENTS}
@@ -259,6 +262,14 @@ class Gemini(GlobalHooks):
     def command(self):
         self.install_hooks()
         return [self.binary()]
+
+
+def shell_join(argv):
+    """Befehlszeile für die globalen Hook-Dateien: Antigravity und Gemini führen sie über die
+    System-Shell aus – unter Windows cmd.exe, das keine einfachen Anführungszeichen kennt."""
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(argv)
+    return " ".join(shlex.quote(p) for p in argv)
 
 
 def write_json(path, data):

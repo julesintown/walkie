@@ -25,6 +25,7 @@ Gespeichert wird in ~/.config/walkie/config.env; der laufende Begleiter
 """
 import json
 import re
+import shutil
 import os
 import subprocess
 import sys
@@ -696,16 +697,22 @@ def cmd_setup(args):
             die("Python-Umgebung lässt sich nicht anlegen. Linux: sudo apt install python3-venv")
     ok("bereit")
 
-    step(2, "Pakete installieren (PyQt6, Whisper, Piper, miniaudio …) – dauert 1–3 Minuten")
+    step(2, "Pakete installieren (PyQt6, Whisper, Piper, miniaudio …) – "
+            "rund 200 MB Download, dauert 1–3 Minuten")
     if uv:
-        cmd = [uv, "pip", "install", "--python", str(py), "-r", str(root / "requirements.txt")]
+        install = [uv, "pip", "install", "--python", str(py)]
     else:
         pip = [str(py), "-m", "pip", "--disable-pip-version-check"]
         subprocess.run([*pip, "install", "-q", "--upgrade", "pip"])
-        cmd = [*pip, "install", "-r", str(root / "requirements.txt"), "--progress-bar", "on"]
-    if subprocess.run(cmd).returncode != 0:
+        # kein zweiter Satz aller Pakete im pip-Cache
+        install = [*pip, "install", "--no-cache-dir", "--progress-bar", "on"]
+    if subprocess.run([*install, "-r", str(root / "requirements.txt")]).returncode != 0 or \
+            subprocess.run([*install, "--no-deps", "-r",
+                            str(root / "requirements-nodeps.txt")]).returncode != 0:
         die("Pakete konnten nicht installiert werden (siehe oben). Internet da?")
     ok("installiert")
+    if sys.platform.startswith("linux"):
+        system_libraries(py, root)
 
     step(3, "Stimme laden")
     if "--no-assets" in args:
@@ -720,9 +727,9 @@ def cmd_setup(args):
     if "--no-assets" in args:
         print("  Übersprungen (--no-assets)")
     else:
-        code = ("from faster_whisper import WhisperModel; import sys; "
-                "WhisperModel(sys.argv[1], device='cpu', compute_type='int8'); print('ok')")
-        if subprocess.run([str(py), "-c", code, S.get("WALKIE_WHISPER")]).returncode:
+        code = ("import sys; sys.path.insert(0, sys.argv[2]); "
+                "from transcription import whisper_model; whisper_model(sys.argv[1]); print('ok')")
+        if subprocess.run([str(py), "-c", code, S.get("WALKIE_WHISPER"), str(root)]).returncode:
             print(c("  ⚠ Whisper konnte nicht geladen werden. Die lokale Spracherkennung "
                     "braucht dieses Modell.", "33"))
 
@@ -743,6 +750,43 @@ def cmd_setup(args):
               "Reden: Kopfhörer-Play, Klick auf die Figur oder Strg+Alt+Leertaste.")
 
 
+def system_libraries(py, root):
+    """Qt-/Audio-Systembibliotheken, die pip nicht mitbringt (z. B. libxcb-icccm4 unter WSL):
+    ohne Passwort (root, CI) direkt installieren, im Terminal mit sudo nachfragen, sonst den
+    Befehl nennen. Ohne sie startet die Figur nicht."""
+    def check():
+        r = subprocess.run([str(py), str(root / "sysdeps.py"), "--json"],
+                           capture_output=True, text=True)
+        try:
+            return json.loads(r.stdout)
+        except ValueError:
+            return {"missing": [], "command": None}
+    info = check()
+    if not info["missing"]:
+        return
+    print(f"  Es fehlen Systembibliotheken: {', '.join(info['missing'])}")
+    cmd = info.get("command")
+    if not cmd:
+        print(c("  ⚠ Bitte über die Paketverwaltung nachinstallieren.", "33"))
+        return
+    shown = "sudo " + " ".join(cmd)
+    if os.geteuid() == 0:
+        subprocess.run(cmd)
+    elif shutil.which("sudo") and subprocess.run(["sudo", "-n", "true"],
+                                                 capture_output=True).returncode == 0:
+        subprocess.run(["sudo", "-n", *cmd])
+    elif shutil.which("sudo") and sys.stdin.isatty():
+        print(f"  Installiere sie jetzt (einmalig, fragt nach deinem Passwort):\n  {shown}")
+        subprocess.run(["sudo", *cmd])
+    else:
+        print(c(f"  ⚠ Bitte einmal im Terminal ausführen:\n    {shown}", "33"))
+        return
+    if check()["missing"]:
+        print(c(f"  ⚠ Noch nicht vollständig. Bitte selbst ausführen:\n    {shown}", "33"))
+    else:
+        ok("Systembibliotheken installiert")
+
+
 def cmd_start(_args):
     if bridge_ready():
         ok("läuft schon")
@@ -758,6 +802,11 @@ def cmd_start(_args):
         if process and process.poll() not in (None, 0):
             break
         time.sleep(0.2)
+    if sys.platform.startswith("linux"):
+        r = subprocess.run([paths.python(), str(install_dir() / "sysdeps.py")],
+                           capture_output=True, text=True)
+        if r.returncode:
+            die("Start fehlgeschlagen. " + r.stdout.strip())
     die(f"Start fehlgeschlagen – walkie doctor oder {RUN / 'walkie.log'} prüfen")
 
 

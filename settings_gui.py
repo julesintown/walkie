@@ -888,9 +888,8 @@ class SettingsWindow(QWidget):
         if model is None:
             global _whisper
             if _whisper is None:
-                from faster_whisper import WhisperModel
-                _whisper = WhisperModel(S.get("WALKIE_WHISPER"), device="cpu", compute_type="int8",
-                                        cpu_threads=os.cpu_count() or 4)
+                from transcription import whisper_model
+                _whisper = whisper_model(S.get("WALKIE_WHISPER"), cpu_threads=os.cpu_count() or 4)
             model = _whisper
         from walkie import transcribe
         try:

@@ -17,10 +17,11 @@ class SetupTest(unittest.TestCase):
         import cli
         calls = []
 
-        def run(command):
+        def run(command, **_kw):
             calls.append(command)
             return SimpleNamespace(returncode=next((code for part, code in failures.items()
-                                                    if part in command), 0))
+                                                    if part in command), 0),
+                                   stdout='{"missing": [], "command": null}')
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -47,9 +48,11 @@ class SetupTest(unittest.TestCase):
     def test_no_assets_still_requires_passing_doctor(self):
         status, calls, _ = self.run_setup(["--no-assets"], {"--allow-missing-agent": 1})
         self.assertEqual(status, 1)
-        self.assertEqual(len(calls), 2)
-        self.assertIn("install", calls[0])
-        self.assertIn("--allow-missing-agent", calls[1])
+        installs = [c for c in calls if "install" in c]
+        self.assertEqual(len(installs), 2, "Pakete, dann faster-whisper ohne PyAV")
+        self.assertIn("--no-deps", installs[1])
+        self.assertIn("--allow-missing-agent", calls[-1])
+        self.assertFalse(any("fetch_assets.py" in str(c) for c in calls))
 
     def test_failed_downloads_report_both_warnings_and_continue(self):
         status, calls, output = self.run_setup([], {"voices": 1, "-c": 1})

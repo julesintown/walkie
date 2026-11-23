@@ -154,6 +154,13 @@ def agent_label(key):
     return dict(S.AGENTS).get(key, key)
 
 
+def agent_names():
+    """Namen der eingestellten Agents für Whisper (Haupt- und Zweitagent)."""
+    names = {"claude": ["Claude", "Claude Code"], "codex": ["Codex"],
+             "antigravity": ["Antigravity"], "gemini": ["Gemini"]}
+    return [n for key in ("WALKIE_AGENT", "WALKIE_AGENT_2") for n in names.get(S.get(key), [])]
+
+
 def clean_env():
     """Umgebung ohne Variablen einer umgebenden Claude-Code-Session."""
     env = {k: v for k, v in os.environ.items()
@@ -1879,19 +1886,36 @@ class Walkie(QWidget):
         self.talk_pipeline(path, cut)
 
     def vocab(self):
-        """Wörter, die Whisper sonst gern verhört („Claude“ -> „Cloud“): Agent, eigener
-        Name und die Projekte der offenen Sessions."""
-        words = [WALKIE_NAME] + (["Claude", "Claude Code"] if S.get("WALKIE_AGENT") == "claude" else [])
-        for s in self.bridge.active_sessions().values():
-            name = (s.get("project") or "").replace("-", " ").replace("_", " ").strip()
-            if name and name not in words:
-                words.append(name)
-        return words[:12]
+        """Wörter, die Whisper sonst gern verhört („Claude“ -> „Cloud“, „auth middleware“ ->
+        „off middle where“): Agent, eigener Name, Projekte der offenen Sessions, Bezeichner
+        aus deren Verlauf und die zuletzt geänderten Dateien ihrer Git-Repos (vocab.py).
+        -> (Hinweiswörter für Whisper, Begriffe für die Nachkorrektur)"""
+        import vocab
+        base = [WALKIE_NAME, *agent_names()]
+        sessions = self.with_context(self.bridge.active_sessions())
+        if not any(s.get("cwd") for s in sessions.values()):
+            sessions["_home"] = {"cwd": router.home_dir()}
+        try:
+            found = vocab.terms(sessions)
+        except Exception as ex:  # noqa: BLE001 – Vokabular ist nur eine Hilfe
+            dbg(f"vokabular: {ex!r}")
+            found = []
+        return vocab.hint(base, found), found
+
+    def hear(self, wav):
+        """Transkribieren mit Kontextvokabular und Bezeichner-Korrektur."""
+        import vocab
+        words, found = self.vocab()
+        text = transcribe(self.whisper, wav, words)
+        fixed = vocab.correct(text, found)
+        if fixed != text:
+            dbg(f"vokabular: {text!r} -> {fixed!r}")
+        return fixed
 
     def pipeline(self, wav, pos):
         bus = self.bus
         try:
-            text = transcribe(self.whisper, wav, self.vocab())
+            text = self.hear(wav)
             if not text:
                 bus.state.emit("idle")
                 bus.action.emit("Cringe")
@@ -2251,8 +2275,7 @@ class Walkie(QWidget):
         cut: Aufnahme lief ins Zeitlimit – das wird angesagt, damit nichts still verloren geht."""
         try:
             # fast stumm: Whisper erfindet dann gern Sätze („Okay, wir werden das Set …“)
-            text = transcribe(self.whisper, wav, self.vocab()) \
-                if heard else ""
+            text = self.hear(wav) if heard else ""
             dbg(f"reden: {text!r}")
             if not text:
                 self.bus.state.emit("idle")
@@ -2310,6 +2333,12 @@ class Walkie(QWidget):
             if self.has_terminal():
                 self.deliver_terminal(text, self.term_pos())
                 return                                # Antwort kommt über das eigene Terminal
+            if not router.brains(clean_env()):
+                # Kein Denkmodell (weder claude, codex, agy noch gemini im PATH) und kein
+                # eigenes Terminal: lieber eine sichtbare Session öffnen als stumm scheitern.
+                dbg("reden: kein Denkmodell – neue Session des Hauptagenten")
+                self.open_new_session(text, agent=S.get("WALKIE_AGENT"))
+                return
             self.bus.state.emit("idle")
             self.say_q.put(Speech("Moment, ich schaue nach."))
             answer = router.ask_self(spoken_prompt(text), RUN, WALKIE_NAME, sessions, env=clean_env(),
@@ -2856,9 +2885,8 @@ class Walkie(QWidget):
         try:
             if not self.need_whisper() or self.whisper is not None:
                 return
-            from faster_whisper import WhisperModel
-            self.whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8",
-                                        cpu_threads=os.cpu_count() or 4)
+            from transcription import whisper_model
+            self.whisper = whisper_model(WHISPER_MODEL, cpu_threads=os.cpu_count() or 4)
             self.whisper_retry_at = 0.0
         except Exception as ex:
             self.whisper_retry_at = time.monotonic() + MODEL_RETRY_SECONDS

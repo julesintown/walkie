@@ -66,8 +66,13 @@ class SettingsTest(unittest.TestCase):
     def test_auto_talk_uses_selected_cli_and_honours_explicit_route(self):
         from unittest.mock import patch
         for agent in ("claude", "codex", "gemini", "antigravity", "custom"):
-            with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="auto"):
+            with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="auto"), \
+                    patch.object(S, "has_kitty", return_value=True):
                 self.assertEqual(S.talk_terminal(), agent != "claude")
+            # Ohne kitty (Windows, WSL) gibt es kein eigenes Terminal: routen statt verlieren
+            with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="auto"), \
+                    patch.object(S, "has_kitty", return_value=False):
+                self.assertFalse(S.talk_terminal())
             with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="route"):
                 self.assertFalse(S.talk_terminal())
 

@@ -67,10 +67,24 @@ def main(argv=None):
                      ("piper", "Vorlesen"),
                      ("faster_whisper", "Spracherkennung (Whisper)")):
         try:
+            if mod == "faster_whisper":
+                from transcription import without_pyav
+                without_pyav()
             __import__(mod)
             line(True, f"{mod} ({why})")
         except (ImportError, OSError) as ex:
             line(False, f"{mod} nicht ladbar ({why}): {ex} – walkie setup ausführen")
+    if sys.platform.startswith("linux"):
+        import sysdeps
+        libs = sysdeps.report()
+        qt = [m for m in libs["missing"] if m != "libasound.so.2"]
+        fix = (" – sudo " + " ".join(libs["command"])) if libs["command"] else ""
+        headless = os.environ.get("QT_QPA_PLATFORM") in ("offscreen", "minimal")
+        if qt:
+            line(None if headless else False,
+                 f"Systembibliotheken für Qt fehlen: {', '.join(qt)}{fix}")
+        if "libasound.so.2" in libs["missing"]:
+            line(None, f"Keine Audio-Bibliothek (ALSA/PulseAudio) gefunden{fix}")
     sprite = settings.sprite_dir()
     line((sprite / "AnimData.xml").exists(), f"Sprite: {sprite}")
     voice = settings.get("WALKIE_VOICE")

@@ -1,0 +1,2 @@
+# Ohne ihre Abhängigkeiten installiert (`--no-deps`), siehe requirements.txt
+faster-whisper>=1.0,<2

@@ -234,19 +234,33 @@ def judge_answer(situation, text, env=None, cwd=None, model="haiku", log=lambda 
         return None
 
 
+BRAIN_BINS = {"claude": ("WALKIE_CLAUDE_BIN", "claude"), "codex": ("WALKIE_CODEX_BIN", "codex"),
+              "antigravity": ("WALKIE_AGY_BIN", "agy"), "gemini": ("WALKIE_GEMINI_BIN", "gemini")}
+
+
+def brain_bin(brain):
+    var, default = BRAIN_BINS[brain]
+    return os.environ.get(var) or default
+
+
 def brains(env=None):
     """Which CLIs think for the Walkie, in order: with WALKIE_BRAIN=auto the primary agent's
-    (Claude or Codex) first, then the other one if installed."""
+    first, then every other installed one (Claude, Codex, Antigravity, Gemini). Without Claude
+    Code, e.g. on a Windows machine with only `agy`, the Walkie still routes and answers."""
     import shutil
 
     import settings
     pref = settings.get("WALKIE_BRAIN")
-    if pref in ("claude", "codex"):
-        order = [pref]
-    else:
-        order = ["codex", "claude"] if settings.get("WALKIE_AGENT") == "codex" else ["claude", "codex"]
+    agent = settings.get("WALKIE_AGENT")
+    order = ["claude", "codex", "antigravity", "gemini"]
+    first = pref if pref in BRAIN_BINS else agent if agent in BRAIN_BINS else None
+    if first:
+        order.remove(first)
+        order.insert(0, first)
+        if pref in BRAIN_BINS:
+            order = [pref]
     path = (env or os.environ).get("PATH")
-    return [b for b in order if shutil.which(_codex_bin() if b == "codex" else "claude", path=path)]
+    return [b for b in order if shutil.which(brain_bin(b), path=path)]
 
 
 BRAIN_PAUSE = 300                 # s: a failed brain (e.g. usage limit) is skipped this long
@@ -264,6 +278,8 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
         try:
             if brain == "codex":
                 out = _codex(prompt, env, cwd, timeout, settings.get("WALKIE_CODEX_MODEL"))
+            elif brain in ("antigravity", "gemini"):
+                out = _print_mode(brain, prompt, env, cwd, timeout)
             else:
                 out = _claude(["--model", claude_model or settings.get("WALKIE_SUMMARY_MODEL"),
                                "--tools", "", "--no-session-persistence"], prompt, env, cwd,
@@ -274,11 +290,32 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
             log(f"{brain}: {ex}")
             errors.append(f"{brain}: {ex}")
             _brain_down[brain] = time.time() + BRAIN_PAUSE
-    raise RuntimeError("; ".join(errors) or "no model: neither claude nor codex is installed")
+    raise RuntimeError("; ".join(errors) or "no model: install claude, codex, agy or gemini")
 
 
 def _codex_bin():
-    return os.environ.get("WALKIE_CODEX_BIN", "codex")
+    return brain_bin("codex")
+
+
+def _run(argv, **kw):
+    """subprocess.run with the program resolved through PATH/PATHEXT: npm installs `claude`,
+    `codex` and `gemini` as .cmd shims on Windows, which CreateProcess does not find by name."""
+    import shutil
+    exe = shutil.which(argv[0], path=(kw.get("env") or os.environ).get("PATH")) or argv[0]
+    env = dict(kw.pop("env", None) or os.environ)
+    env["WALKIE_HOOK_QUIET"] = "1"       # the agent's global Walkie hooks stay silent
+    return subprocess.run([exe, *argv[1:]], env=env, encoding="utf-8", errors="replace", **kw)
+
+
+def _print_mode(brain, prompt, env, cwd, timeout):
+    """Antigravity (`agy -p`) and Gemini CLI (`gemini -p`): one prompt, plain text answer."""
+    r = _run([brain_bin(brain), "-p", prompt], capture_output=True, timeout=timeout,
+             env=env, cwd=cwd, stdin=subprocess.DEVNULL)
+    out = (r.stdout or "").strip()
+    if r.returncode != 0 or not out:
+        lines = [ln for ln in (r.stderr or r.stdout or "").splitlines() if ln.strip()]
+        raise RuntimeError((lines[-1] if lines else f"exit {r.returncode}")[:200])
+    return out
 
 
 def _codex(prompt, env, cwd, timeout, model):
@@ -287,12 +324,11 @@ def _codex(prompt, env, cwd, timeout, model):
     fd, out = tempfile.mkstemp(suffix=".txt", prefix="walkie-codex-")
     os.close(fd)
     try:
-        r = subprocess.run([_codex_bin(), "exec", "-m", model, "-s", "read-only",
-                            "--skip-git-repo-check", "--ephemeral", "--color", "never",
-                            "-c", "notify=[]", "-c", 'model_reasoning_effort="low"',
-                            "-o", out, "-"],
-                           input=prompt, capture_output=True, text=True, timeout=timeout,
-                           env=env, cwd=cwd)
+        r = _run([_codex_bin(), "exec", "-m", model, "-s", "read-only",
+                  "--skip-git-repo-check", "--ephemeral", "--color", "never",
+                  "-c", "notify=[]", "-c", 'model_reasoning_effort="low"',
+                  "-o", out, "-"],
+                 input=prompt, capture_output=True, timeout=timeout, env=env, cwd=cwd)
         answer = Path(out).read_text(encoding="utf-8").strip()
         if r.returncode != 0 or not answer:
             lines = [ln for ln in (r.stderr or r.stdout).splitlines() if ln.strip()]
@@ -303,8 +339,8 @@ def _codex(prompt, env, cwd, timeout, model):
 
 
 def _claude(args, prompt, env, cwd, timeout):
-    r = subprocess.run(["claude", "-p", *args], input=prompt, capture_output=True, text=True,
-                       timeout=timeout, env=env, cwd=cwd)
+    r = _run([brain_bin("claude"), "-p", *args], input=prompt, capture_output=True,
+             timeout=timeout, env=env, cwd=cwd)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip()[:200])
     return r.stdout
@@ -433,7 +469,7 @@ def ask_self(text, run_dir, name, sessions, env=None, cwd=None, model="haiku"):
     system = SELF_SYSTEM.format(name=name, sessions=", ".join(
         s.get("project") or k[:8] for k, s in sessions.items()) or "keine")
     order = brains(env)
-    if order and order[0] == "codex":
+    if order and order[0] != "claude":
         try:
             return ask_model(f"{system}\n\n{text}", env, cwd, 120)
         except Exception:  # noqa: BLE001

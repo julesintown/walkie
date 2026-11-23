@@ -343,6 +343,8 @@ def parse(argv):
 
 
 def main():
+    if os.environ.get("WALKIE_HOOK_QUIET"):
+        return                          # Denk-Aufruf des Walkies selbst (router.py), keine Session
     argv = sys.argv[1:]
     codex_plugin = argv[:1] == ["--plugin-codex"]     # Codex plugin: Claude-style hook input
     plugin = argv[:1] in (["--plugin"], ["--plugin-codex"])

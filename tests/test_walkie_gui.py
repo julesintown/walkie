@@ -955,7 +955,11 @@ class WalkieTest(unittest.TestCase):
             self.assertEqual(opened[-1][-1], self.ev.spoken_prompt("Such ein Rezept"))
             self.assertIn("Codex-Session", b.say_q.get_nowait())
             b.open_new_session("Such ein Rezept", agent="antigravity")
-            self.assertEqual(len(opened), 1, "agy kann keine Session mit Auftrag starten")
+            self.assertEqual(opened[-1][-2:], ["--prompt-interactive",
+                                               self.ev.spoken_prompt("Such ein Rezept")])
+            self.assertIn("Antigravity", b.say_q.get_nowait())
+            b.open_new_session("Such ein Rezept", agent="custom")
+            self.assertEqual(len(opened), 2, "eigener Befehl kann keine Session mit Auftrag starten")
             self.assertIn("walkie drafts", b.say_q.get_nowait())
             b.open_new_session("Such ein Rezept", agent="claude")
             self.assertIn("--session-id", opened[-1])

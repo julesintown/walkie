@@ -31,7 +31,7 @@
  "Ein schnelles Codex-Modell, z. B. gpt-6-luna.": "A fast Codex model, e.g. gpt-6-luna.",
  "Endet eine Session mit einer Frage, liest die Figur sie vor und hört zu. Deine Antwort geht an genau diese Session.": "When a session ends with a question, the figure reads it aloud and listens. Your answer goes to exactly that session.",
  "English": "English",
- "Entscheidet, wohin Gesagtes geht, versteht Antworten und bereitet Vorlesetexte auf. Automatisch: das Modell des Hauptagenten; fällt es aus (z. B. Nutzungslimit), der andere installierte Agent.": "Decides where what you say goes, understands answers and prepares texts for reading aloud. Automatic: the primary agent’s model; if it fails (e.g. usage limit), the other installed agent.",
+ "Entscheidet, wohin Gesagtes geht, versteht Antworten und bereitet Vorlesetexte auf. Automatisch: das Modell des Hauptagenten; fällt es aus (z. B. Nutzungslimit), ein anderer installierter Agent.": "Decides where what you say goes, understands answers and prepares texts for reading aloud. Automatic: the primary agent’s model; if it fails (e.g. usage limit), another installed agent.",
  "Fenster nach vorne holen, wenn eine Session fragt": "Bring window to front when a session asks",
  "Figur": "Figure",
  "Figur (Sprite-Ordner)": "Figure (sprite folder)",
@@ -121,5 +121,7 @@
  "„Stopp“, „warte“ oder einfach Losreden beendet das Vorlesen. Nur mit Kopfhörern und einem eigenen Mikro (Laptop, USB) – das Bluetooth-Mikro würde den Kopfhörer sonst in den Telefonmodus schalten; dort unterbricht ein Tastendruck.": "“Stop”, “wait” or simply starting to talk ends the read-aloud. Only with headphones and a separate mic (laptop, USB) – the Bluetooth mic would otherwise switch the headset into phone mode; there a button press interrupts.",
  "… bei Fehlern": "… on errors",
  "… wenn eine Session dich braucht": "… when a session needs you",
- "… wenn eine Session fertig ist": "… when a session is done"
+ "… wenn eine Session fertig ist": "… when a session is done",
+ "Antigravity": "Antigravity",
+ "Gemini": "Gemini"
 }

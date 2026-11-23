@@ -12,6 +12,7 @@ lesen und schreiben dieselbe Datei. Umgebungsvariablen haben Vorrang (zum Testen
 import json
 import os
 import shlex
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -216,9 +217,10 @@ SCHEMA = [
             [("haiku", "Haiku – schnell"), ("sonnet", "Sonnet – gründlicher"), ("opus", "Opus")]),
     Setting("WALKIE_BRAIN", "choice", "auto", "voice", "Denkmodell des Begleiters",
             "Entscheidet, wohin Gesagtes geht, versteht Antworten und bereitet Vorlesetexte auf. "
-            "Automatisch: das Modell des Hauptagenten; fällt es aus (z. B. Nutzungslimit), der "
-            "andere installierte Agent.",
-            [("auto", "Automatisch"), ("claude", "Claude"), ("codex", "Codex")]),
+            "Automatisch: das Modell des Hauptagenten; fällt es aus (z. B. Nutzungslimit), ein "
+            "anderer installierter Agent.",
+            [("auto", "Automatisch"), ("claude", "Claude"), ("codex", "Codex"),
+             ("antigravity", "Antigravity"), ("gemini", "Gemini")]),
     Setting("WALKIE_SUMMARY_MODEL", "choice", "haiku", "voice", "Claude-Modell fürs Denken",
             "", [("haiku", "Haiku – schnell, günstig"), ("sonnet", "Sonnet"),
                  ("opus", "Opus")]),
@@ -366,9 +368,20 @@ def voice_for_language(code, preferred=None):
                  if (HERE / "voices" / (VOICES[name][0] + ".onnx")).is_file()), candidates[0])
 
 
+def has_kitty():
+    """Das eigene Terminal über der Figur ist ein kitty-Panel – das gibt es nur unter Linux
+    (und macOS), und nur, wenn kitty installiert ist."""
+    import shutil
+    return sys.platform != "win32" and shutil.which("kitty") is not None
+
+
 def talk_terminal():
+    """Geht Gesagtes ins eigene Terminal statt an die passende Session? „auto“ nimmt das
+    Terminal nur, wenn es eins gibt: ohne kitty (Windows, WSL, GNOME ohne kitty) würde jedes
+    Diktat sonst unzustellbar in den Entwürfen landen."""
     mode = get("WALKIE_TALK")
-    return mode == "terminal" or (mode == "auto" and get("WALKIE_AGENT") != "claude")
+    return mode == "terminal" or (mode == "auto" and get("WALKIE_AGENT") != "claude"
+                                  and has_kitty())
 
 
 def overridden(key):

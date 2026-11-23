@@ -66,6 +66,8 @@ def open_terminal(argv, cwd=None, title="Claude"):
     kw = {"cwd": cwd, "env": env, "stdin": subprocess.DEVNULL,
           "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if WIN:
+        # npm-Shims (claude.cmd, codex.cmd, gemini.cmd) findet CreateProcess nicht ohne Endung
+        argv = [shutil.which(argv[0]) or argv[0], *argv[1:]]
         if shutil.which("wt"):
             cmd = ["wt", "-d", cwd, *argv]
         else:

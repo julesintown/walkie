@@ -11,6 +11,27 @@ HALLUCINATIONS = re.compile(
     r"thank you( for watching)?|thanks for watching|you|bye|\.+|…)[.!?]*$", re.I)
 
 
+def without_pyav():
+    """faster-whisper importiert PyAV (`av`) nur, um Audiodateien zu dekodieren. Der Walkie
+    übergibt fertige numpy-Arrays (load_wav), die Installation lässt das ~130 MB große Paket
+    deshalb weg – hier steht stattdessen ein leerer Platzhalter."""
+    import sys
+    import types
+    try:
+        import av  # noqa: F401
+    except ImportError:
+        stub = types.ModuleType("av")
+        stub.__walkie_stub__ = True
+        sys.modules.setdefault("av", stub)
+
+
+def whisper_model(name, **kw):
+    """faster_whisper.WhisperModel laden (CPU, int8) – auch ohne PyAV."""
+    without_pyav()
+    from faster_whisper import WhisperModel
+    return WhisperModel(name, device="cpu", compute_type="int8", **kw)
+
+
 def transcribe(model, wav, hint=None):
     """Whisper-Text einer WAV-Datei: ohne Wiederholungen ("ja, ja, ja") und ohne die
     typischen Stille-Halluzinationen. hint = erwartete Wörter (z. B. Optionen)."""

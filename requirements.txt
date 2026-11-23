@@ -2,7 +2,14 @@ PyQt6>=6.5
 miniaudio>=1.59                      # Aufnahme/Wiedergabe auf Linux, macOS, Windows (ohne Systempakete)
 numpy
 piper-tts>=1.3
-faster-whisper>=1.0
+# faster-whisper ohne PyAV (~130 MB, nur zum Dekodieren von Audiodateien – der Walkie liefert
+# fertige Samples): `walkie setup` installiert es danach mit --no-deps, hier stehen seine
+# übrigen Abhängigkeiten.
+ctranslate2>=4.0,<5
+huggingface-hub>=0.21
+tokenizers>=0.13,<1
+onnxruntime>=1.14,<2
+tqdm
 pynput>=1.7                          # globaler Hotkey; Medientasten unter Windows
 evdev; sys_platform == "linux"       # Kopfhörertasten direkt (Linux)
 pyobjc-framework-MediaPlayer; sys_platform == "darwin"   # Kopfhörertasten (macOS)

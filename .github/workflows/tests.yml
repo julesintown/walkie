@@ -90,12 +90,12 @@ jobs:
         run: |
           ~/.local/share/walkie/venv/bin/python - <<'PYTHON'
           from pathlib import Path
-          from faster_whisper import WhisperModel
           from piper import PiperVoice
           import settings as S
+          from transcription import whisper_model
           voice = S.VOICES[S.get("WALKIE_VOICE")][0]
           PiperVoice.load(str(Path("voices") / f"{voice}.onnx"))
-          WhisperModel(S.get("WALKIE_WHISPER"), device="cpu", compute_type="int8", local_files_only=True)
+          whisper_model(S.get("WALKIE_WHISPER"), local_files_only=True)
           PYTHON
       - name: Begleiter starten, Brücke abfragen und beenden
         env:
