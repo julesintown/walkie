@@ -1,4 +1,5 @@
 """Kontextvokabular: Bezeichner aus Repo und Verlauf, konservative Nachkorrektur."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import subprocess
 import sys
 import tempfile

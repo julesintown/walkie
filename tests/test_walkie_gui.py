@@ -1,5 +1,6 @@
 """Begleiter-Logik offscreen mit synthetischer Mini-Figur (keine geschützten Grafiken nötig).
 Übersprungen, wenn PyQt6 fehlt."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import json
 import os
 import shutil

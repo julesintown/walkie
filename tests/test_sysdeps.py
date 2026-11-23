@@ -1,4 +1,5 @@
 """Fehlende Qt-Systembibliotheken (WSL: libxcb-icccm4, libxcb-keysyms1) erkennen."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import subprocess
 import sys
 import unittest

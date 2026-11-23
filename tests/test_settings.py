@@ -1,4 +1,5 @@
 """Zentrale Einstellungen (settings.py) und das `walkie`-Kommando (cli.py)."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import json
 import os
 import shutil

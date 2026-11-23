@@ -1,4 +1,5 @@
 """Ein Fehler in einem Slot protokolliert statt den Walkie zu beenden."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import os
 import subprocess
 import sys

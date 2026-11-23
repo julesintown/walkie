@@ -1,4 +1,5 @@
 """Shimeji-Import mit Platzhalter-Bildern (keine echten Grafiken im Repo)."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import os
 import sys
 import tempfile

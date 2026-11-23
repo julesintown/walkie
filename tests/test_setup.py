@@ -1,4 +1,5 @@
 """Setup must distinguish an optional download failure from a broken installation."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import contextlib
 import io
 import os

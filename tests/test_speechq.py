@@ -1,4 +1,5 @@
 """Sprechwarteschlange mit Vorrang (Idee aus heard)."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import sys
 import unittest
 from pathlib import Path

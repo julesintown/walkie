@@ -1,4 +1,5 @@
 """Vorlesbar machen: Pfade, Kürzel, Einleitungen (Ideen aus Moonstone und term-pet)."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import os
 import sys
 import unittest

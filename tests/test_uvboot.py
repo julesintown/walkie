@@ -1,4 +1,5 @@
 """uv-Download: Prüfsummen und Plattformzuordnung, gleich in uvboot.py und den Startern."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import re
 import subprocess
 import sys

@@ -1,4 +1,5 @@
 """Brücke (lokaler HTTP-Dienst) und Router – ohne GUI, ohne Netz."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import json
 import os
 import shutil

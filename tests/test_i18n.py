@@ -1,4 +1,5 @@
 """Jeder t("…")-Text im Code hat eine englische Übersetzung, und die Platzhalter passen."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import ast
 import json
 import os

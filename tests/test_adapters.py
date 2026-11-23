@@ -1,4 +1,5 @@
 """Ein Adapter je Agent: Ereignis-Übersetzung und Fähigkeiten an einer Stelle."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import os
 import subprocess
 import sys

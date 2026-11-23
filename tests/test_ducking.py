@@ -1,4 +1,5 @@
 """Musik leiser beim Zuhören/Vorlesen und danach genau wie vorher (ohne echte Audiogeräte)."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import json
 import subprocess
 import sys

@@ -1,4 +1,5 @@
 """macOS-Aufnahme über ein Hilfsprogramm (stdout -> WAV), mit Ersatzprogramm statt Swift."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import os
 import stat
 import sys

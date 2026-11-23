@@ -1,4 +1,5 @@
 """CLI-Regressionen für die Zeit zwischen Instanz-Lock und betriebsbereiter Brücke."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import tempfile
 import unittest
 from pathlib import Path

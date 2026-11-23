@@ -1,4 +1,5 @@
 """Direct mode, show and new sessions: the router model decides, the code only follows it."""
+import isolate  # noqa: F401 – zuerst: nie in die echten Walkie-Ordner
 import sys
 import unittest
 from pathlib import Path
