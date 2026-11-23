@@ -1893,7 +1893,7 @@ class Walkie(QWidget):
         -> (Hinweiswörter für Whisper, Begriffe für die Nachkorrektur)"""
         import vocab
         base = [WALKIE_NAME, *agent_names()]
-        sessions = self.with_context(self.bridge.active_sessions())
+        sessions = self.bridge.active_sessions()      # Verlauf: was die Brücke schon kennt
         if not any(s.get("cwd") for s in sessions.values()):
             sessions["_home"] = {"cwd": router.home_dir()}
         try:
