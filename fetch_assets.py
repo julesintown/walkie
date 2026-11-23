@@ -9,6 +9,7 @@ Stimmen: https://huggingface.co/rhasspy/piper-voices
 """
 import os
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 from urllib.parse import quote
@@ -30,12 +31,26 @@ def fetch(url, dest):
         return
     if os.environ.get("HF_HUB_OFFLINE", "").strip().upper() in {"1", "ON", "YES", "TRUE"}:
         raise OSError(f"{dest.name} fehlt lokal (HF_HUB_OFFLINE)")
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    # eigene Teildatei je Download: zwei gleichzeitige Downloads derselben Stimme (schnelles
+    # Umschalten in den Einstellungen) schrieben sonst in dieselbe Datei
+    tmp = dest.with_suffix(f"{dest.suffix}.{os.getpid()}-{threading.get_ident()}.part")
     req = urllib.request.Request(quote(url, safe=":/"), headers={"User-Agent": "walkie"})
-    with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
-        while chunk := r.read(1 << 16):
-            f.write(chunk)
-    tmp.replace(dest)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+            while chunk := r.read(1 << 16):
+                f.write(chunk)
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def fetch_voice(name):
+    """Eine Stimme laden (ohne Ausgabe) – Fehler als Exception."""
+    out = HERE / "voices"
+    out.mkdir(exist_ok=True)
+    path = voice_path(name)
+    fetch(f"{VOICE_BASE}/{path}.onnx.json", out / f"{name}.onnx.json")
+    fetch(f"{VOICE_BASE}/{path}.onnx", out / f"{name}.onnx")
 
 
 def voices(which):

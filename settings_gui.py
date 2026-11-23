@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (QAbstractButton, QApplication, QComboBox, QDoubleSp
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import audio  # noqa: E402
+import crashguard  # noqa: E402
 import keymap  # noqa: E402
 import settings as S  # noqa: E402
 from i18n import lang, t  # noqa: E402
@@ -136,7 +137,13 @@ class Bg(QObject):
 
     def __init__(self, fn, cb, *args):
         super().__init__()
-        self.done.connect(cb)
+
+        def deliver(res):
+            try:
+                cb(res)
+            except RuntimeError:              # Seite inzwischen neu aufgebaut (Sprachwechsel)
+                pass
+        self.done.connect(deliver)
         _keep.add(self)
 
         def run():
@@ -384,19 +391,25 @@ class SettingsWindow(QWidget):
     def save(self, key, value):
         if key == "WALKIE_VOICE" and value in S.VOICES:
             model = S.VOICES[value][0]
+            self.wanted_voice = value
             if not (HERE / "voices" / f"{model}.onnx").exists():
+                loading = self.__dict__.setdefault("voice_downloads", set())
+                if model in loading:
+                    return                       # läuft schon; übernommen wird die zuletzt gewählte
+                loading.add(model)
                 self.toast(t("Stimme „{voice}“ wird geladen …", voice=value))
 
                 def fetch():
-                    import contextlib
-                    import io
-
                     import fetch_assets
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        fetch_assets.voices([model])
-                Bg(fetch, lambda r, k=key, v=value: (
-                    self.toast(t("Laden fehlgeschlagen: {error}", error=r)) if isinstance(r, Exception)
-                    else self.save(k, v)))
+                    fetch_assets.fetch_voice(model)
+
+                def done(r, v=value):
+                    loading.discard(model)
+                    if isinstance(r, Exception):
+                        self.toast(t("Laden fehlgeschlagen: {error}", error=r))
+                    elif getattr(self, "wanted_voice", None) == v:
+                        self.save(key, v)        # nur, wenn inzwischen keine andere gewählt ist
+                Bg(fetch, done)
                 return
         try:
             S.set(key, value)
@@ -745,8 +758,11 @@ class SettingsWindow(QWidget):
         if not lines:
             LEARN_FLAG.touch()
             return
-        ev = json.loads(lines[-1])
-        key, gest = ev["key"], ev["gesture"]
+        try:
+            ev = json.loads(lines[-1])
+            key, gest = ev["key"], ev["gesture"]
+        except (ValueError, KeyError, TypeError):
+            return                               # Zeile wird gerade geschrieben
         m = S.get("WALKIE_KEYS")
         if key not in m and key not in S.DEFAULT_KEYS:
             m = {k: dict(v) for k, v in m.items()}
@@ -898,6 +914,8 @@ class SettingsWindow(QWidget):
             os.unlink(wav)
 
     def transcribed(self, text):
+        if not crashguard.alive(self.test_btn):
+            return                              # Seite inzwischen neu aufgebaut
         self.test_btn.setEnabled(True)
         if isinstance(text, Exception):
             self.test_result.setText(t("Fehler: {error}", error=text))
@@ -919,9 +937,9 @@ class SettingsWindow(QWidget):
         self.doctor.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         c.lay.addWidget(self.doctor)
         b1 = QPushButton(t("Einstellungsdatei öffnen"))
-        b1.clicked.connect(lambda: subprocess.Popen(["xdg-open", str(S.CONFIG)]))
+        b1.clicked.connect(lambda: self.open_path(S.CONFIG))
         b2 = QPushButton(t("Ordner öffnen"))
-        b2.clicked.connect(lambda: subprocess.Popen(["xdg-open", str(HERE)]))
+        b2.clicked.connect(lambda: self.open_path(HERE))
         b3 = QPushButton(t("Neu starten"), objectName="primary")
         b3.clicked.connect(self.restart_walkie)
         b3.setEnabled(self.walkie is not None)
@@ -934,12 +952,28 @@ class SettingsWindow(QWidget):
         pg.lay.addStretch(1)
         return pg
 
+    def open_path(self, path):
+        """Datei/Ordner im Standardprogramm öffnen – plattformneutral (kein xdg-open unter
+        Windows/macOS). Die Einstellungsdatei entsteht erst mit der ersten Änderung."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        path = Path(path)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            self.toast(t("Lässt sich nicht öffnen: {path}", path=path))
+
     def refresh_info(self):
         def run():
             r = subprocess.run([sys.executable, str(HERE / "doctor.py")], capture_output=True,
-                               text=True, timeout=30)
+                               text=True, encoding="utf-8", errors="replace", timeout=30,
+                               stdin=subprocess.DEVNULL,
+                               **({"creationflags": subprocess.CREATE_NO_WINDOW}
+                                  if sys.platform == "win32" else {}))
             return (r.stdout + r.stderr).strip()
-        Bg(run, lambda out: self.doctor.setText(str(out)))
+        doctor = self.doctor
+        Bg(run, lambda out: crashguard.alive(doctor) and doctor.setText(str(out)))
 
     def closeEvent(self, e):
         LEARN_FLAG.unlink(missing_ok=True)
@@ -1017,6 +1051,8 @@ class SpritePreview(QLabel):
 
 
 def main():
+    import crashguard
+    crashguard.install(lambda m: print(m, file=sys.stderr), RUN)
     app = QApplication(sys.argv)
     app.setApplicationName("Walkie")
     app.setDesktopFileName("walkie")

@@ -96,5 +96,6 @@
  "pkexec fehlt – der Befehl liegt in der Zwischenablage (Terminal, einmalig).": "pkexec is missing – the command is on your clipboard (run it once in a terminal).",
  "{device} (nicht verbunden)": "{device} (not connected)",
  "{name} – Einstellungen": "{name} – Settings",
- "…nichts…": "…nothing…"
+ "…nichts…": "…nothing…",
+ "Lässt sich nicht öffnen: {path}": "Cannot open: {path}"
 }

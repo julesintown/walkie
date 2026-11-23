@@ -2992,6 +2992,8 @@ def main():
         (RUN / "install").write_text(str(HERE), encoding="utf-8")
     except OSError:
         pass
+    import crashguard
+    crashguard.install(dbg, RUN, notify=lambda m: notify(t("Huch, Fehler: {ex}", ex=m)))
     app = QApplication(sys.argv)
     app.setApplicationName("Walkie")
     app.setDesktopFileName("walkie")
