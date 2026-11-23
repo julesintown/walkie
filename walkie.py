@@ -54,6 +54,7 @@ from i18n import Speech, lang, render, spoken_prompt, t  # noqa: E402
 from agents import make_agent  # noqa: E402
 from sprite import DOWN, DOWN_LEFT, DOWN_RIGHT, LEFT, RIGHT, Animator, SpriteSet  # noqa: E402
 from surfaces import Surfaces, ledges  # noqa: E402
+from transcription import HALLUCINATIONS, load_wav, transcribe  # noqa: E402
 
 # ---------------------------------------------------------------- Einstellungen
 # Einstellungen: settings.py (~/.config/walkie/config.env), live per S.get().
@@ -111,10 +112,6 @@ SUMMARY_PROMPT = (
 # -> mindestens WINDOW s zuhören, solange gesprochen wird bis MAX verlängern.
 SESSION_TTL = 3600        # Sessions ohne Ereignis so lange vergessen
 STUCK_AFTER = 900         # "denkt" ohne jedes Ereignis -> vermutlich abgestürzt
-# Whisper erfindet bei Stille gern Floskeln -> verwerfen
-HALLUCINATIONS = re.compile(
-    r"^(untertitel.*|vielen dank( fürs zuschauen)?|danke( schön)?|tschüss|"
-    r"thank you( for watching)?|thanks for watching|you|bye|\.+|…)[.!?]*$", re.I)
 KITTY_SOCK = f"unix:{os.environ.get('XDG_RUNTIME_DIR', '/tmp')}/walkie-kitty"
 VOICE_MARK = "🎤"
 RING = QColor("#FF7A6B")
@@ -233,41 +230,6 @@ def speakable(text):
     text = re.sub(r"\b[0-9a-f]{7,40}\b", "", text)
     text = re.sub(r"(\w\.\w+):\d+(?::\d+)?\b", r"\1", text)      # datei.py:12 -> datei.py
     return re.sub(r"[ \t]{2,}", " ", text)
-
-
-def transcribe(model, wav, hint=None):
-    """Whisper-Text einer WAV-Datei: ohne Wiederholungen ("ja, ja, ja") und ohne die
-    typischen Stille-Halluzinationen. hint = erwartete Wörter (z. B. Optionen)."""
-    kw = {"initial_prompt": ". ".join(hint) + "."} if hint else {}
-    segs, _ = model.transcribe(load_wav(wav), language=S.get("WALKIE_LANG") or None,
-                               vad_filter=True, beam_size=1, condition_on_previous_text=False,
-                               **kw)
-    text = " ".join(s.text.strip() for s in segs).strip()
-    text = re.sub(r"\s*[\[(][^\])]{1,30}[\])]\s*", " ", text).strip()   # [Musik], (Stille) – aus VoiceMode
-    text = re.sub(r"\b((?:\w+\W+){0,2}?\w+)(?:[,.!]?\s+\1\b)+", r"\1", text, flags=re.I)
-    if hint and len(hint) > 1 and text.rstrip(".") == kw["initial_prompt"].rstrip("."):
-        return ""                                  # Stille: Whisper wiederholt nur den Hinweis
-    return "" if HALLUCINATIONS.match(text) else text
-
-
-def load_wav(path):
-    """WAV -> float32 mono 16 kHz (ohne PyAV)."""
-    import wave
-    import numpy as np
-    with wave.open(path, "rb") as w:
-        sr, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
-        raw = w.readframes(w.getnframes())
-    if not raw and os.path.getsize(path) > 44:  # Header evtl. nicht finalisiert
-        raw = Path(path).read_bytes()[44:]
-    dtype = {2: np.int16, 4: np.int32}[width]
-    a = np.frombuffer(raw[: len(raw) // (width * ch) * width * ch], dtype=dtype)
-    a = a.astype(np.float32) / float(np.iinfo(dtype).max)
-    if ch > 1:
-        a = a.reshape(-1, ch).mean(axis=1)
-    if sr != 16000 and len(a):
-        n = int(len(a) * 16000 / sr)
-        a = np.interp(np.linspace(0, len(a) - 1, n), np.arange(len(a)), a).astype(np.float32)
-    return a
 
 
 # --------------------------------------------------------------------------- #
