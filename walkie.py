@@ -1525,7 +1525,8 @@ class Walkie(QWidget):
             return
         req = reqs[-1]
         p = self.pending[req]
-        why = risk.risky(p.get("tool"), p.get("command") or p.get("detail"))
+        why = risk.critical(p.get("tool"), p.get("command") or p.get("detail")) or \
+            risk.risky(p.get("tool"), p.get("command") or p.get("detail"))
         if action == "allow" and why:                # Unumkehrbares nie blind per Taste
             self.say_q.put(Speech("Das {why}. Bitte per Stimme bestätigen oder am Rechner entscheiden.", why=Speech(why)))
             return
@@ -2592,6 +2593,8 @@ class Walkie(QWidget):
             hint = [] if p.get("via") == "terminal" else [Speech("Ja"), Speech("Nein"), "Okay"]
             if p.get("questions") and len(p["answers"]) < len(p["questions"]):
                 hint = p["questions"][len(p["answers"])]["options"] + hint
+            if p.get("code"):
+                hint = [Speech("Bestätige {code}", code=p["code"])] + hint
             text = transcribe(self.whisper, wav, hint)
             dbg(f"answer {req}: {text!r} ({time.time() - t0:.1f}s)")
             p = self.pending.get(req)
@@ -2603,7 +2606,10 @@ class Walkie(QWidget):
                     self.deliver_terminal(text, None, session=p["session"])
                 self.bus.state.emit("idle")
                 return
-            result, reply = self.interpret(p, text)
+            if p.get("code"):
+                result, reply = self.check_code(p, text)
+            else:
+                result, reply = self.interpret(p, text)
             if result == "repeat" and p.get("repeats", 0) < 2:   # „welche Optionen?“
                 p["repeats"] = p.get("repeats", 0) + 1
                 self.bus.state.emit("idle")
@@ -2648,13 +2654,21 @@ class Walkie(QWidget):
                 again = True
                 self.bus.ask.emit(req)
                 return
-            why = risk.risky(p.get("tool"), p.get("command") or p.get("detail"))
+            cmd_text = p.get("command") or p.get("detail")
+            why = risk.risky(p.get("tool"), cmd_text)
             if (why and result.get("behavior") == "allow" and not p.get("confirmed")
                     and p.get("kind") not in ("reply", "route") and not p.get("questions")):
                 p["confirmed"], p["tries"] = True, 0          # zweites, klares Ja nötig
                 self.bus.state.emit("idle")
-                cmd = speakable(p.get("command") or p["detail"])[:140]
-                self.speak(Speech("Achtung, das {why}: {cmd}. Wirklich erlauben? Ja oder nein.", why=Speech(why), cmd=cmd))
+                cmd = speakable(cmd_text)[:140]
+                crit = risk.critical(p.get("tool"), cmd_text)
+                if crit:
+                    # Kritisch: ein versehentliches „ja“ reicht nicht – Zahlencode nachsprechen
+                    p["code"] = risk.new_code()
+                    self.speak(Speech("Achtung, das {why}: {cmd}. Zum Erlauben sag: Bestätige {code}. Sonst nein.",
+                                      why=Speech(crit), cmd=cmd, code=p["code"]))
+                else:
+                    self.speak(Speech("Achtung, das {why}: {cmd}. Wirklich erlauben? Ja oder nein.", why=Speech(why), cmd=cmd))
                 again = True
                 self.bus.ask.emit(req)
                 return
@@ -2691,6 +2705,18 @@ class Walkie(QWidget):
                 pass
             if not again:
                 self.answer_done.set()
+
+    def check_code(self, p, text):
+        """Kritischer Befehl: erlaubt nur mit dem genannten Zahlencode. „Nein“ und andere
+        Antworten versteht das Modell wie sonst auch; ein Ja ohne Code zählt nicht."""
+        if risk.code_heard(text, p["code"]):
+            dbg("freigabe: code bestätigt")
+            return {"behavior": "allow"}, Speech("Okay, bestätigt und erlaubt.")
+        result, reply = self.interpret(p, text)
+        if isinstance(result, dict) and result.get("behavior") == "allow":
+            return None, Speech("Ohne den Code erlaube ich das nicht. Sag: Bestätige {code}.",
+                                code=p["code"])
+        return result, reply
 
     @staticmethod
     def interpret(p, text, judge=None):

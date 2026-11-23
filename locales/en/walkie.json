@@ -108,5 +108,18 @@
  "ändert Rechte rekursiv": "changes permissions recursively",
  "überschreibt Systemdateien": "overwrites system files",
  "überschreibt den Verlauf auf dem Server": "overwrites history on the server",
- "🎧 {name} verbunden": "🎧 {name} connected"
+ "🎧 {name} verbunden": "🎧 {name} connected",
+ "Achtung, das {why}: {cmd}. Zum Erlauben sag: Bestätige {code}. Sonst nein.": "Careful, this {why}: {cmd}. To allow it, say: confirm {code}. Otherwise say no.",
+ "Okay, bestätigt und erlaubt.": "Okay, confirmed and allowed.",
+ "Ohne den Code erlaube ich das nicht. Sag: Bestätige {code}.": "I won't allow this without the code. Say: confirm {code}.",
+ "löscht Dateien rekursiv und ohne Rückfrage": "deletes files recursively without asking",
+ "löscht alle Zeilen einer Tabelle": "deletes every row of a table",
+ "entfernt Spalten oder Tabellenteile": "drops columns or parts of a table",
+ "setzt die Datenbank zurück": "resets the database",
+ "löscht oder ändert Infrastruktur": "deletes or changes infrastructure",
+ "geht in die Produktion": "goes to production",
+ "ändert Daten in der Datenbank": "changes data in the database",
+ "ändert das Datenbankschema": "changes the database schema",
+ "löscht Docker-Daten": "deletes Docker data",
+ "Bestätige {code}": "Confirm {code}"
 }

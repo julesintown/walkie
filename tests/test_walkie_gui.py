@@ -247,6 +247,21 @@ class WalkieTest(unittest.TestCase):
         b.decide_newest("allow")
         self.assertEqual(written, [("r1", {"behavior": "allow"})])
 
+    def test_critical_command_needs_the_spoken_code(self):
+        from unittest.mock import patch
+        b = self.b
+        p = {"tool": "Bash", "command": "vercel deploy --prod", "code": 42, "questions": [],
+             "answers": {}}
+        with patch.object(self.ev.Walkie, "interpret",
+                          staticmethod(lambda p, text, judge=None: ({"behavior": "allow"}, "ok"))):
+            self.assertEqual(b.check_code(p, "Bestätige zweiundvierzig")[0], {"behavior": "allow"})
+            result, reply = b.check_code(p, "Ja, mach.")
+            self.assertIsNone(result, "ein Ja ohne Code gibt nichts frei")
+            self.assertIn("42", reply)
+        with patch.object(self.ev.Walkie, "interpret",
+                          staticmethod(lambda p, text, judge=None: ({"behavior": "deny"}, "no"))):
+            self.assertEqual(b.check_code(p, "Nein")[0], {"behavior": "deny"})
+
     def test_interpret_permission(self):
         p = {"questions": [], "answers": {}, "tool": "Bash", "detail": "rm -rf build"}
         f = self.ev.Walkie.interpret
