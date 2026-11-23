@@ -5,6 +5,7 @@ import isolate  # noqa: E402,F401
 import contextlib
 import io
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,6 +39,7 @@ class SetupTest(unittest.TestCase):
                   patch.object(paths, "HERE", root),
                   patch("uvboot.ensure_uv", return_value="uv"),
                   patch("audio.build_mac_voicemic", return_value=False),
+                  patch.object(cli, "install_launcher", return_value=None),
                   patch.object(cli.subprocess, "run", side_effect=run),
                   contextlib.redirect_stdout(output), contextlib.redirect_stderr(output)):
                 try:
@@ -73,3 +75,36 @@ class SetupTest(unittest.TestCase):
                 dest.write_bytes(b"cached")
                 fetch_assets.fetch("https://example.invalid/model", dest)
                 download.assert_not_called()
+
+
+class LauncherTest(unittest.TestCase):
+    def test_launcher_points_to_installation_and_is_idempotent(self):
+        import cli
+        with tempfile.TemporaryDirectory() as temp:
+            home, root = Path(temp) / "home", Path(temp) / "walkie"
+            (root / "bin").mkdir(parents=True)
+            (root / "bin" / "walkie").write_text("#!/bin/sh\n")
+            (root / "bin" / "walkie.cmd").write_text("@echo off\n")
+            env = {"LOCALAPPDATA": str(Path(temp) / "local")}
+            with patch.object(Path, "home", return_value=home), patch.dict(os.environ, env), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                dest = cli.install_launcher(root)
+                self.assertIsNotNone(dest)
+                if sys.platform == "win32":
+                    self.assertIn(str(root / "bin" / "walkie.cmd"), dest.read_text())
+                else:
+                    self.assertEqual(dest.resolve(), (root / "bin" / "walkie").resolve())
+                self.assertEqual(cli.install_launcher(root), dest, "zweimal: nichts kaputt")
+
+    @unittest.skipIf(sys.platform == "win32", "Symlink-Fall nur Linux/macOS")
+    def test_foreign_file_is_left_alone(self):
+        import cli
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            (home / ".local" / "bin").mkdir(parents=True)
+            foreign = home / ".local" / "bin" / "walkie"
+            foreign.write_text("mein eigenes Skript")
+            with patch.object(Path, "home", return_value=home), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertIsNone(cli.install_launcher(Path(temp) / "walkie"))
+            self.assertEqual(foreign.read_text(), "mein eigenes Skript")

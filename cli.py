@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """walkie – Walkie im Terminal steuern (nur Standardbibliothek).
 
+  walkie                          starten (beim ersten Mal: vorher einrichten)
+
   walkie settings                 Menü für alle Einstellungen (Pfeiltasten + Enter)
   walkie settings --window        dasselbe in einem eigenen Terminalfenster
   walkie list [--json] [GRUPPE]   alle Einstellungen mit aktuellem Wert
@@ -762,6 +764,7 @@ def cmd_setup(args):
         if audio.build_mac_voicemic(root, log=print):
             ok("Mac-Mikrofon mit Echounterdrückung bereit (Einstellungen → experimentell)")
 
+    install_launcher(root)
     step(5, "Prüfen und starten")
     if subprocess.run([str(py), str(root / "doctor.py"), "--allow-missing-agent"]).returncode:
         die("Einrichtung fehlgeschlagen. Die mit ✗ markierten Probleme oben beheben.")
@@ -809,6 +812,75 @@ def system_libraries(py, root):
         print(c(f"  ⚠ Noch nicht vollständig. Bitte selbst ausführen:\n    {shown}", "33"))
     else:
         ok("Systembibliotheken installiert")
+
+
+def launcher_path():
+    """Wo der Befehl `walkie` hinkommt: ~/.local/bin (Linux/macOS) bzw. der WindowsApps-Ordner,
+    der unter Windows ab Werk im Suchpfad liegt."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA")
+        return Path(base) / "Microsoft" / "WindowsApps" / "walkie.cmd" if base else None
+    return Path.home() / ".local" / "bin" / "walkie"
+
+
+def install_launcher(root=None, quiet=False):
+    """Den Befehl `walkie` einrichten (auch nach einer Installation übers Claude-Plugin, die
+    keinen anlegt). Zeigt er schon auf diese Installation, passiert nichts."""
+    root = Path(root or install_dir())
+    dest = launcher_path()
+    if dest is None:
+        return None
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            text = f'@echo off\r\n"{root / "bin" / "walkie.cmd"}" %*\r\n'
+            if not dest.exists() or dest.read_text(encoding="utf-8", errors="replace") != text:
+                dest.write_text(text, encoding="utf-8", newline="")
+        else:
+            target = root / "bin" / "walkie"
+            if dest.is_symlink() or dest.exists():
+                if dest.resolve() == target.resolve():
+                    return dest
+                if not dest.is_symlink():
+                    return None                   # fremde Datei: nicht anfassen
+                dest.unlink()
+            dest.symlink_to(target)
+    except OSError as ex:
+        if not quiet:
+            print(dim(f"  Befehl `walkie` nicht eingerichtet: {ex}"))
+        return None
+    if not quiet:
+        ok(f"Befehl `walkie` eingerichtet ({dest})")
+        on_path = str(dest.parent) in os.environ.get("PATH", "").split(os.pathsep)
+        if not on_path and sys.platform != "win32":
+            print(dim(f"  {dest.parent} liegt nicht im Suchpfad. Einmal ergänzen, z. B.:\n"
+                      f"    echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc"))
+    return dest
+
+
+def installed():
+    """Ist die Python-Umgebung mit den Paketen des Walkies eingerichtet?"""
+    import paths
+    py = paths.python()
+    if py == sys.executable and not any(paths.venv_python(v).exists() for v in paths.venvs()):
+        return False
+    r = subprocess.run([py, "-c", "import PyQt6.QtWidgets, miniaudio, numpy"],
+                       capture_output=True)
+    return r.returncode == 0
+
+
+def cmd_default(_args):
+    """`walkie` ohne alles: einrichten, falls nötig – sonst starten."""
+    if bridge_ready():
+        ok("Walkie läuft schon. Einstellungen: walkie gui · Hilfe: walkie help")
+        install_launcher(quiet=True)
+        return
+    if not installed():
+        print(bold("Walkie ist noch nicht eingerichtet – das passiert jetzt einmalig."))
+        cmd_setup([])
+        return
+    install_launcher(quiet=True)
+    cmd_start([])
 
 
 def cmd_start(_args):
@@ -935,7 +1007,10 @@ def main(argv=None):
     if real != HERE and (real / "cli.py").exists() and not os.environ.get("WALKIE_CLI_FORWARDED"):
         os.environ["WALKIE_CLI_FORWARDED"] = "1"
         os.execv(sys.executable, [sys.executable, str(real / "cli.py"), *argv])
-    if not argv or argv[0] in ("-h", "--help", "help"):
+    if not argv:
+        cmd_default([])                   # einfach `walkie`: einrichten oder starten
+        return
+    if argv[0] in ("-h", "--help", "help"):
         print(__doc__.strip())
         return
     fn = COMMANDS.get(argv[0])

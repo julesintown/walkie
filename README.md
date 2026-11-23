@@ -94,7 +94,8 @@ cd walkie
 ./install.sh
 ```
 
-On Windows, run `bin\walkie.cmd setup` in the cloned folder. Setup can download Python with
+On Windows, run `bin\walkie.cmd setup` in the cloned folder. Afterwards just type `walkie` to start it (the first time, this also sets it up).
+Setup can download Python with
 [uv](https://github.com/astral-sh/uv) if needed. Use `walkie start` to bring the figure back later.
 From the repository, use `./bin/walkie start` on Linux/macOS or `bin\walkie.cmd start` on Windows.
 
