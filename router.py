@@ -43,8 +43,16 @@ Targets:
   use "secondary". If the
   sentence belongs to one of the project folders without a session (speech recognition twists
   names, e.g. "shop front end" for "shop-frontend"), answer "new" with "folder": "<folder name>".
-- "self": small talk, short knowledge or research questions (the assistant can search the web),
-  questions about the sessions as a whole. NOT feedback, ideas or questions about the voice
+- "overview": the user wants to hear how things stand instead of giving work: what happened or
+  what they missed, which sessions are done, working or waiting for them, the state or progress
+  of one session or of the whole project – in any wording and language, also very short ones.
+  "message": what exactly they want to know, in their words (a quick update, one project,
+  details, a full status). Status questions about one session (is it done, is it waiting, how
+  far is it) are "overview" too: the assistant knows its state and last answer. Only when the
+  user wants the session itself to explain, check, change or do something does it go to that
+  session.
+- "self": small talk, short knowledge or research questions (the assistant can search the web).
+  NOT feedback, ideas or questions about the voice
   assistant itself, its behaviour or its settings: those belong to the session "in_conversation"
   (the user is probably developing or testing it there).
 - "show": the user only wants to SEE a session's window (bring it to the front); nothing is
@@ -83,6 +91,7 @@ stay close to the wording.
 Answer ONLY with JSON, e.g. {{"target": "<session-id>", "message": "..."}},
 {{"target": "new", "explicit": true, "message": "..."}},
 {{"target": "new", "folder": "<folder>", "message": "..."}}, {{"target": "self", "message": "..."}},
+{{"target": "overview", "message": "..."}},
 {{"target": "show", "session": "<id>"}}, {{"target": "direct", "session": "<id>", "message": ""}},
 {{"target": "direct_end"}},
 {{"target": "ask", "options": ["<id>", "<id>"], "labels": {{"<id>": "..."}}, "message": "..."}} or
@@ -208,6 +217,10 @@ Rules by "kind":
   to drop the question altogether. "unclear" for empty or meaningless speech.
 - "reply": the agent asked the user an open question. "pass" when the user wants to skip it or
   answer later at the computer; "reply" otherwise; "unclear" for empty or meaningless speech.
+- "permission" with "confirmation_code": a critical command. "allow" ONLY when the user clearly
+  says this exact number as a confirmation (digits, number words in any language, or digit by
+  digit), and then also set "code_said": true. Consent without the number, or with another
+  number, is "unclear". Refusal is "deny" as usual.
 - "permission" and "question": "repeat" only when the user asks to hear the question or its
   options again ("which options?", "say that again"). A question about the content itself is
   not "repeat".
@@ -217,7 +230,7 @@ Allowed decisions: "permission" -> allow, deny, unclear, repeat; "question" -> a
 unclear, repeat; "reply" -> reply, pass, unclear.
 
 Answer ONLY with JSON:
-{{"decision": "...", "values": [], "other": "", "message": ""}}"""
+{{"decision": "...", "values": [], "other": "", "message": "", "code_said": false}}"""
 
 
 def judge_answer(situation, text, env=None, cwd=None, model="haiku", log=lambda m: None):
@@ -381,15 +394,15 @@ def route(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: None,
 
 
 def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: None, last=None,
-               direct=None, agents=("Claude Code", None)):
+               direct=None, agents=("Claude Code", None), history=False):
     """Understand speech instead of forwarding it blindly: -> (kind, target, task).
-    kind: session · new · self · show · direct · direct_end · ask · unclear. One model call
+    kind: session · new · self · overview · show · direct · direct_end · ask · unclear. One model call
     decides by the rules in ROUTE_PROMPT, in any language. Names and folders are only hints; if
     the model fails, the fast name/folder matching decides. last = (sid, ts) of the session the
     user addressed last; direct = session id of an active direct mode; agents = (primary label,
     secondary label or None). kind "new_secondary": a new session for the secondary agent."""
-    if not sessions:
-        return "self", None, text
+    if not sessions and not history:
+        return "self", None, text                     # nichts zu routen, nichts zu berichten
     direct = direct if direct in sessions else None
     by_n = by_name(text, sessions)
     folder = by_folder(text)
@@ -455,6 +468,8 @@ def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: 
             return "session", direct or thread or latest(sessions), msg
         if target == "self":
             return "self", None, msg
+        if target == "overview":
+            return "overview", None, msg
         if target == "ask":
             opts = [o for o in got.get("options") or [] if o in sessions][:3]
             if len(opts) >= 2:

@@ -41,11 +41,10 @@ class RiskTest(unittest.TestCase):
             self.assertIsNone(critical("Bash", cmd), cmd)
         self.assertIsNone(critical("Bash", "git commit -m 'prod fix'"))
 
-    def test_code_is_heard_in_any_spoken_form(self):
-        for text in ("Bestätige 42", "bestätige zweiundvierzig", "confirm forty two",
-                     "Confirm 42.", "vier zwei"):
+    def test_code_as_digits_only_words_are_for_the_model(self):
+        for text in ("Bestätige 42", "Confirm 42.", "42"):
             self.assertTrue(code_heard(text, 42), text)
-        for text in ("ja", "yes", "Bestätige 24", "confirm"):
+        for text in ("ja", "yes", "Bestätige 24", "142", "zweiundvierzig"):
             self.assertFalse(code_heard(text, 42), text)
 
     def test_codes_are_two_digit_and_distinct_sounding(self):

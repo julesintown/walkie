@@ -129,12 +129,10 @@ def hint(base, found, limit=HINT_WORDS):
     return words
 
 
-FILLER = {"the", "a", "an", "in", "on", "to", "of", "and", "or", "is", "at", "for", "with",
-          "der", "die", "das", "den", "dem", "des", "ein", "eine", "im", "in", "und", "oder",
-          "mit", "von", "zu", "zum", "zur", "an", "am", "auf", "ist", "bei", "für"}
-
-
 def _match(chunk, cands, fuzzy, threshold):
+    """Exakt: die Buchstaben stimmen überein, egal wie Whisper sie auf Wörter verteilt hat
+    („uv boot“ -> uvboot). Unscharf (Verhörer): nur bei gleicher Wortzahl wie der Bezeichner –
+    so verschluckt eine Korrektur nie Nachbarwörter, ohne Wortlisten in irgendeiner Sprache."""
     words = [_letters(w) for w in chunk]
     key = "".join(words)
     if len(key) < 6:
@@ -144,11 +142,11 @@ def _match(chunk, cands, fuzzy, threshold):
         if len(chunk) == 1 and " " not in t.spoken and "." not in chunk[0]:
             return None                   # „router“ bleibt „router“, nicht router.py
         return 1.0, t
-    if not fuzzy or words[0] in FILLER or words[-1] in FILLER:
+    if not fuzzy:
         return None
     best = None
     for ckey, t in cands.items():
-        if " " not in t.spoken and len(chunk) == 1:
+        if len(t.spoken.split()) != len(chunk) or len(chunk) < 2:
             continue
         if abs(len(ckey) - len(key)) > max(1, len(ckey) // 10):
             continue
@@ -158,18 +156,26 @@ def _match(chunk, cands, fuzzy, threshold):
     return best
 
 
-DOT = re.compile(r"\b([\w-]+)\s+(?:dot|punkt|point)\s+([a-z]{1,5})\b", re.I)
-
-
 def spoken_dots(text, found):
-    """„router dot ts“ / „router punkt py“ -> router.ts – nur, wenn es die Datei gibt
-    (Idee aus parlar)."""
+    """„router dot ts“, „router punkt py“, … -> router.ts: Name, ein beliebiges Wort, Endung –
+    ersetzt nur, wenn es genau diese Datei gibt (Idee aus parlar; ohne Wortliste)."""
     names = {t.canonical.lower(): t.canonical for t in found if "." in t.canonical}
-
-    def sub(m):
-        name = f"{m.group(1)}.{m.group(2)}".lower()
-        return names.get(name, m.group(0))
-    return DOT.sub(sub, text)
+    if not names:
+        return text
+    tokens = re.findall(r"\S+", text)
+    out, i = [], 0
+    while i < len(tokens):
+        if i + 2 < len(tokens):
+            ext = re.match(r"([a-z0-9]{1,5})([.,!?;:]*)$", tokens[i + 2], re.I)
+            name = re.sub(r"[^\w-]", "", tokens[i])
+            hit = ext and names.get(f"{name}.{ext.group(1)}".lower())
+            if hit and re.fullmatch(r"\w{1,12}", tokens[i + 1]):
+                out.append(hit + ext.group(2))
+                i += 3
+                continue
+        out.append(tokens[i])
+        i += 1
+    return " ".join(out)
 
 
 def correct(text, found, threshold=0.86):

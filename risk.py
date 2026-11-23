@@ -7,7 +7,8 @@ Zwei Stufen:
   critical(tool, detail) -> Grund oder None. Kritisch (rm -rf, Force-Push, Produktion,
                             Datenbank, Infrastruktur): zusätzlich ein gesprochener Zahlencode
                             („Bestätige 42“) – ein versehentliches „ja“ reicht nicht.
-  new_code() / code_heard(text, code) -> Zahlencode erzeugen und in Gesprochenem finden.
+  new_code() / code_heard(text, code) -> Zahlencode erzeugen / als Ziffern finden; jede andere
+                            Form („zweiundvierzig“, „forty two“) beurteilt das Modell.
 """
 import random
 import re
@@ -77,35 +78,9 @@ def new_code(rng=random):
     return rng.choice(choices)
 
 
-_UNITS_DE = {"ein": 1, "eins": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "fuenf": 5,
-             "sechs": 6, "sieben": 7, "acht": 8, "neun": 9}
-_TENS_DE = {"zwanzig": 20, "dreißig": 30, "dreissig": 30, "vierzig": 40, "fünfzig": 50,
-            "fuenfzig": 50, "sechzig": 60, "siebzig": 70, "achtzig": 80, "neunzig": 90}
-_UNITS_EN = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
-             "eight": 8, "nine": 9}
-_TENS_EN = {"twenty": 20, "thirty": 30, "forty": 40, "fourty": 40, "fifty": 50, "sixty": 60,
-            "seventy": 70, "eighty": 80, "ninety": 90}
-
-
-def numbers(text):
-    """Alle Zahlen 1–99 in gesprochenem Text: Ziffern, „zweiundvierzig“, „forty two“,
-    „vier zwei“ (Ziffer für Ziffer)."""
-    t = (text or "").lower()
-    out = [int(n) for n in re.findall(r"\d+", t)]
-    for m in re.finditer(r"(%s)und(%s)" % ("|".join(_UNITS_DE), "|".join(_TENS_DE)), t):
-        out.append(_TENS_DE[m.group(2)] + _UNITS_DE[m.group(1)])
-    words = re.findall(r"[a-zäöüß]+", t)
-    for i, w in enumerate(words):
-        nxt = words[i + 1] if i + 1 < len(words) else ""
-        if w in _TENS_EN:
-            out.append(_TENS_EN[w] + _UNITS_EN.get(nxt, 0))
-        elif w in _TENS_DE:
-            out.append(_TENS_DE[w])
-        single = {**_UNITS_DE, **_UNITS_EN}
-        if w in single and nxt in single:          # Ziffer für Ziffer: „vier zwei“
-            out.append(single[w] * 10 + single[nxt])
-    return out
-
-
 def code_heard(text, code):
-    return int(code) in numbers(text)
+    """Steht der Code als Ziffern im Gesprochenen? (Whisper schreibt Zahlen meist als Ziffern.)
+    Ausgeschriebene Zahlen in irgendeiner Sprache beurteilt das Modell (router.judge_answer
+    mit "confirmation_code") – hier gibt es bewusst keine Zahlwortlisten."""
+    import re
+    return str(int(code)) in re.findall(r"\d+", text or "")

@@ -121,5 +121,6 @@
  "ändert Daten in der Datenbank": "changes data in the database",
  "ändert das Datenbankschema": "changes the database schema",
  "löscht Docker-Daten": "deletes Docker data",
- "Bestätige {code}": "Confirm {code}"
+ "Bestätige {code}": "Confirm {code}",
+ "Sag: Bestätige {code}. Oder nein.": "Say: confirm {code}. Or no."
 }

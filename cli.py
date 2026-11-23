@@ -683,7 +683,7 @@ def cmd_missed(args):
     q = "?speak=1" if "--speak" in args else ""
     req = urllib.request.Request(f"http://127.0.0.1:{info['port']}/digest{q}",
                                  headers={"x-walkie-token": info["token"]})
-    with urllib.request.urlopen(req, timeout=5) as r:
+    with urllib.request.urlopen(req, timeout=90) as r:      # das Modell formuliert
         print(json.loads(r.read())["text"])
 
 

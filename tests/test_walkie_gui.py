@@ -251,34 +251,55 @@ class WalkieTest(unittest.TestCase):
         b.decide_newest("allow")
         self.assertEqual(written, [("r1", {"behavior": "allow"})])
 
-    def test_what_did_i_miss(self):
+    def test_overview_question_goes_to_the_model_with_facts(self):
+        """Ob kurz, eine Session oder Projektstand: das Modell entscheidet anhand der Frage."""
         import queue
-        b = self.b
+        b, ev = self.b, self.ev
         b.say_q = queue.Queue()
         b.seen_ts = 0
         b.handle_event({"event": "stop", "session": "M1", "project": "dashboard",
                         "text": "Die Tests sind durch."})
-        text = b.missed(speak=True)
-        self.assertIn("dashboard ist fertig", text)
-        self.assertIn("Die Tests sind durch.", text)
-        self.assertEqual(b.say_q.get_nowait(), text)
-        self.assertIn("Nichts Neues", b.missed(), "danach gilt alles als gehört")
+        prompts = []
+        with patch.object(ev, "transcribe", lambda model, wav, hint=None: "Na, was läuft so?"), \
+                patch.object(ev.router, "understand",
+                             lambda text, sessions, **k: ("overview", None, "Was läuft so?")), \
+                patch.object(ev.router, "brains", return_value=["claude"]), \
+                patch.object(ev.router, "ask_model",
+                             lambda prompt, *a, **k: prompts.append(prompt) or "Dashboard ist fertig."):
+            b.talk_pipeline(str(TMP / "nichts.wav"))
+        self.assertIn("Was läuft so?", prompts[0])
+        self.assertIn("Die Tests sind durch.", prompts[0])
+        said = [b.say_q.get_nowait(), b.say_q.get_nowait()]
+        self.assertEqual(said[-1], "Dashboard ist fertig.")
         b.bridge.events.queue.clear()
 
-    def test_critical_command_needs_the_spoken_code(self):
-        from unittest.mock import patch
+    def test_overview_without_model_is_a_short_fallback(self):
+        b, ev = self.b, self.ev
+        b.seen_ts = 0
+        b.handle_event({"event": "stop", "session": "M2", "project": "api", "text": "Fertig."})
+        with patch.object(ev.router, "brains", return_value=[]):
+            self.assertIn("api ist fertig", b.missed())
+            self.assertNotIn("api", b.missed(), "danach gilt es als gehört")
+        b.bridge.events.queue.clear()
+
+    def test_critical_command_needs_the_code_confirmed_by_the_model(self):
         b = self.b
-        p = {"tool": "Bash", "command": "vercel deploy --prod", "code": 42, "questions": [],
-             "answers": {}}
-        with patch.object(self.ev.Walkie, "interpret",
-                          staticmethod(lambda p, text, judge=None: ({"behavior": "allow"}, "ok"))):
-            self.assertEqual(b.check_code(p, "Bestätige zweiundvierzig")[0], {"behavior": "allow"})
-            result, reply = b.check_code(p, "Ja, mach.")
-            self.assertIsNone(result, "ein Ja ohne Code gibt nichts frei")
-            self.assertIn("42", reply)
-        with patch.object(self.ev.Walkie, "interpret",
-                          staticmethod(lambda p, text, judge=None: ({"behavior": "deny"}, "no"))):
-            self.assertEqual(b.check_code(p, "Nein")[0], {"behavior": "deny"})
+        p = {"tool": "Bash", "command": "vercel deploy --prod", "code": 42}
+
+        def judge(decision, code_said=False):
+            return lambda situation, said: (self.assertEqual(situation["confirmation_code"], 42)
+                                            or {"decision": decision, "code_said": code_said})
+        allow = {"behavior": "allow"}
+        self.assertEqual(b.check_code(p, "zweiundvierzig", judge("allow", True))[0], allow)
+        self.assertEqual(b.check_code(p, "Bestätige 42", judge("allow"))[0], allow)
+        self.assertIsNone(b.check_code(p, "Ja, mach.", judge("allow"))[0],
+                          "ein Ja ohne bestätigten Code gibt nichts frei")
+        self.assertEqual(b.check_code(p, "Nein, auf keinen Fall 42", judge("deny"))[0]["behavior"],
+                         "deny", "das Modell versteht das Nein trotz Ziffern")
+        self.assertEqual(b.check_code(p, "Bestätige 42", lambda s, t: None)[0], allow,
+                         "ohne Modell: Ziffern genügen")
+        self.assertIsNone(b.check_code(p, "zweiundvierzig", lambda s, t: None)[0],
+                          "ohne Modell: nur Ziffern, keine Zahlwortlisten")
 
     def test_interpret_permission(self):
         p = {"questions": [], "answers": {}, "tool": "Bash", "detail": "rm -rf build"}

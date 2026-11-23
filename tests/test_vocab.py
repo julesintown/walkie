@@ -31,14 +31,19 @@ class Correct(unittest.TestCase):
         for text in ("yes do it", "the router is fine", "the settings are wrong", "ja"):
             self.assertEqual(vocab.correct(text, TERMS), text)
 
-    def test_fuzzy_match_does_not_swallow_filler_words(self):
+    def test_fuzzy_match_never_swallows_neighbouring_words(self):
+        """Ohne Füllwortliste: unscharf nur bei gleicher Wortzahl wie der Bezeichner."""
         self.assertEqual(vocab.correct("open the setings gui now", TERMS),
                          "open the settings_gui.py now")
+        self.assertEqual(vocab.correct("fix it in auth midleware", TERMS),
+                         "fix it in auth_middleware.py")
+        self.assertFalse(hasattr(vocab, "FILLER"))
 
     def test_spoken_dot_only_for_existing_files(self):
         self.assertEqual(vocab.correct("open router dot py please", TERMS),
                          "open router.py please")
         self.assertEqual(vocab.correct("öffne router punkt py", TERMS), "öffne router.py")
+        self.assertEqual(vocab.correct("ouvre router point py.", TERMS), "ouvre router.py.")
         self.assertEqual(vocab.correct("open shop dot js", TERMS), "open shop dot js")
 
     def test_split_words(self):

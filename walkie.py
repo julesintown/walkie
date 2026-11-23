@@ -1514,20 +1514,29 @@ class Walkie(QWidget):
         elif action == "media_prev":
             self.in_thread(media_skip, "Previous")
 
-    def missed(self, speak=False):
-        """„Was habe ich verpasst?“: alles seit dem letzten Überblick, Dringendes zuerst."""
+    def missed(self, speak=False, request=""):
+        """Überblick über die Sessions. Was und wie ausführlich (nur Neues, eine Session, ganzer
+        Projektstand), entscheidet das Modell anhand von request – der Code liefert nur Fakten.
+        Ohne Worte (Taste, `walkie missed`): das Neue seit dem letzten Überblick."""
         import digest
         now = time.time()
         waiting = {}
         for p in list(self.pending.values()):
             if p.get("session") and p.get("kind") != "route":
                 waiting.setdefault(p["session"], render(p.get("reason") or p.get("prompt") or ""))
-        known = self.bridge.active_sessions(max_age=12 * 3600)
-        names = {sid: s.get("project") for sid, s in known.items() if s.get("project")}
-        text = digest.summary(self.timeline.since(self.seen_ts), dict(self.sessions), waiting,
-                              now=now, lang=lang(), names=names)
+        known = self.with_context(self.bridge.active_sessions(max_age=12 * 3600))
+        facts = digest.collect(self.timeline.all(), self.seen_ts, dict(self.sessions), waiting,
+                               known, now=now)
+
+        def ask(prompt):
+            return clean_spoken(router.ask_model(prompt, clean_env(), router.home_dir(), 60,
+                                                 log=dbg))
+        if speak and request:
+            self.say_q.put(Speech("Moment, ich schaue nach."))
+        text = digest.overview(request, facts, lang(), ask if router.brains(clean_env()) else None,
+                               log=dbg)
         self.seen_ts = now
-        dbg(f"verpasst: {text}")
+        dbg(f"überblick ({request[:60]!r}): {text[:300]}")
         if speak:
             self.say_q.put(text)
         return text
@@ -2314,11 +2323,6 @@ class Walkie(QWidget):
                 self.bus.action.emit("Cringe")
                 self.say_q.put(Speech("Hab nichts verstanden."))
                 return
-            import digest
-            if digest.is_request(text):                 # „Was habe ich verpasst?“
-                self.bus.state.emit("idle")
-                self.missed(speak=True)
-                return
             if cut:
                 self.say_q.put(Speech("Das Zeitlimit war erreicht, ich habe bis „{word}“ mitgeschrieben. Sag den Rest gleich nochmal.", word=text.split()[-1]))
             if S.talk_terminal():
@@ -2333,8 +2337,13 @@ class Walkie(QWidget):
                 text, sessions, env=clean_env(), cwd=router.home_dir(),
                 model=S.get("WALKIE_SUMMARY_MODEL"), log=dbg,
                 last=getattr(self, "voice_target", None), direct=self.direct,
-                agents=(agent_label(S.get("WALKIE_AGENT")), agent_label(S.get("WALKIE_AGENT_2"))))
+                agents=(agent_label(S.get("WALKIE_AGENT")), agent_label(S.get("WALKIE_AGENT_2"))),
+                history=bool(self.timeline.all()))
             dbg(f"router: {kind} {sid or ''}")
+            if kind == "overview":                     # wie steht es? – das Modell antwortet
+                self.bus.state.emit("idle")
+                self.missed(speak=True, request=task)
+                return
             if kind == "show":                         # Fenster holen, nichts senden
                 self.bus.state.emit("idle")
                 self.raise_session(sid or self.current_session(), sessions)
@@ -2742,17 +2751,36 @@ class Walkie(QWidget):
             if not again:
                 self.answer_done.set()
 
-    def check_code(self, p, text):
-        """Kritischer Befehl: erlaubt nur mit dem genannten Zahlencode. „Nein“ und andere
-        Antworten versteht das Modell wie sonst auch; ein Ja ohne Code zählt nicht."""
-        if risk.code_heard(text, p["code"]):
+    def check_code(self, p, text, judge=None):
+        """Kritischer Befehl: erlaubt nur mit dem genannten Zahlencode. Was die Antwort bedeutet
+        (Code in jeder Form und Sprache, Ablehnung, „nochmal?“), entscheidet das Modell; es muss
+        den Code ausdrücklich bestätigen (code_said). Nur wenn kein Modell antwortet, genügt der
+        Code als Ziffern – ein bloßes Ja gibt nie frei."""
+        if not text.strip():
+            return None, Speech("Sag: Bestätige {code}. Oder nein.", code=p["code"])
+        digits = risk.code_heard(text, p["code"])
+        if judge is None:
+            def judge(situation, said):
+                return router.judge_answer(situation, said, env=clean_env(), cwd=router.home_dir(),
+                                           model=S.get("WALKIE_SUMMARY_MODEL"), log=dbg)
+        got = judge({"kind": "permission", "tool": p.get("tool", ""),
+                     "detail": p.get("command") or p.get("detail", ""),
+                     "confirmation_code": p["code"]}, text)
+        if got is None and digits:                     # kein Modell erreichbar
+            dbg("freigabe: code als ziffern bestätigt (ohne modell)")
+            return {"behavior": "allow"}, Speech("Okay, bestätigt und erlaubt.")
+        got = got or {}
+        if got.get("decision") == "deny":
+            note = str(got.get("message") or "").strip() or text
+            return ({"behavior": "deny", "message": Speech("Per Sprache abgelehnt: „{note}“", note=note)},
+                    Speech("Okay, abgelehnt."))
+        if got.get("decision") == "allow" and (got.get("code_said") is True or digits):
             dbg("freigabe: code bestätigt")
             return {"behavior": "allow"}, Speech("Okay, bestätigt und erlaubt.")
-        result, reply = self.interpret(p, text)
-        if isinstance(result, dict) and result.get("behavior") == "allow":
-            return None, Speech("Ohne den Code erlaube ich das nicht. Sag: Bestätige {code}.",
-                                code=p["code"])
-        return result, reply
+        if got.get("decision") == "repeat":
+            return "repeat", ""
+        return None, Speech("Ohne den Code erlaube ich das nicht. Sag: Bestätige {code}.",
+                            code=p["code"])
 
     @staticmethod
     def interpret(p, text, judge=None):
