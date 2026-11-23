@@ -18,10 +18,19 @@ import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
 
 
 from i18n import lang, t
+
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer löst den Namen per Reverse-DNS auf. Auf macOS kann das selbst
+        # für 127.0.0.1 den GUI-Start blockieren. Adresse und Port sind hier lokal.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address
 
 
 class Bridge:
@@ -107,7 +116,7 @@ class Bridge:
         os.makedirs(self.run, exist_ok=True)
         path = os.path.join(self.run, "server.json")
         tmp = path + ".tmp"
-        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        httpd = LoopbackHTTPServer(("127.0.0.1", 0), Handler)
         port = httpd.server_address[1]
         try:
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

@@ -27,6 +27,18 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(post.call_count, 2)
         ok.assert_called_once_with("beendet")
 
+    def test_loopback_bridge_starts_without_name_resolution(self):
+        from bridge import Bridge
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge = Bridge(tmp)
+            try:
+                with patch("socket.getfqdn", side_effect=AssertionError("reverse DNS")):
+                    port = bridge.start()
+                self.assertEqual((bridge.httpd.server_name, bridge.httpd.server_port),
+                                 ("127.0.0.1", port))
+            finally:
+                bridge.stop()
+
     def test_bridge_publication_failure_releases_server_for_retry(self):
         from bridge import Bridge
         with tempfile.TemporaryDirectory() as tmp:
