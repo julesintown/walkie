@@ -165,6 +165,9 @@ SCHEMA = [
     Setting("WALKIE_ANNOUNCE_ATTENTION", "bool", True, "ask", "… wenn eine Session dich braucht"),
     Setting("WALKIE_ANNOUNCE_ERROR", "bool", True, "ask", "… bei Fehlern"),
     Setting("WALKIE_ANNOUNCE_DONE", "bool", True, "ask", "… wenn eine Session fertig ist"),
+    Setting("WALKIE_DUCK", "int", 30, "ask", "Musik leiser beim Zuhören und Vorlesen (%)",
+            "Andere Programme spielen so lange mit diesem Anteil ihrer Lautstärke weiter und "
+            "danach wieder wie vorher. 100 = nicht leiser.", min=0, max=100),
     Setting("WALKIE_ANNOUNCE_AFTER", "int", 20, "ask", "„Fertig“ erst nach … Sekunden Arbeit",
             "Kurze Hin-und-her-Runden werden nicht angesagt.", min=0, max=600),
     Setting("WALKIE_SUMMARY", "choice", "claude", "ask", "Antworten zusammenfassen",

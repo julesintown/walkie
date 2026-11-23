@@ -785,7 +785,8 @@ class SettingsWindow(QWidget):
                        t("Was die Figur ansagt und wie du per Stimme antwortest – auch ohne Bildschirm."))
         c = self.card(pg, t("Ansagen"))
         for k in ("WALKIE_ANNOUNCE", "WALKIE_ANNOUNCE_ATTENTION", "WALKIE_ANNOUNCE_ERROR",
-                  "WALKIE_ANNOUNCE_DONE", "WALKIE_ANNOUNCE_AFTER", "WALKIE_SUMMARY"):
+                  "WALKIE_ANNOUNCE_DONE", "WALKIE_ANNOUNCE_AFTER", "WALKIE_SUMMARY",
+                  "WALKIE_DUCK"):
             self.setting_row(c, k)
         c = self.card(pg, t("Antworten per Stimme"),
                       t("Nach der Frage ertönt ein steigender Ton: jetzt sprechen. Ein fallender Ton "

@@ -123,5 +123,7 @@
  "… wenn eine Session dich braucht": "… when a session needs you",
  "… wenn eine Session fertig ist": "… when a session is done",
  "Antigravity": "Antigravity",
- "Gemini": "Gemini"
+ "Gemini": "Gemini",
+ "Musik leiser beim Zuhören und Vorlesen (%)": "Lower music while listening and speaking (%)",
+ "Andere Programme spielen so lange mit diesem Anteil ihrer Lautstärke weiter und danach wieder wie vorher. 100 = nicht leiser.": "Other apps keep playing at this share of their volume meanwhile and return to their previous volume afterwards. 100 = don’t lower."
 }

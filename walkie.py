@@ -750,6 +750,8 @@ class Walkie(QWidget):
             (S.get("WALKIE_KEYS").get("PLAYPAUSE") or {}).get("press", "talk"))
         self.device_stop = threading.Event()
         self.headset_audio = HeadsetAudio(HfpButton, dbg)
+        import ducking
+        self.ducker = ducking.Ducker(lambda: S.get("WALKIE_DUCK"), dbg)
         self.mic_owner = None
         self.key_reader = threading.Thread(target=headset_loop, args=(self.bus, self.device_stop),
                                            daemon=True)
@@ -1368,6 +1370,9 @@ class Walkie(QWidget):
     def set_state(self, s):
         if s != getattr(self, "state", None):
             self.state_since = time.time()
+            ducker = getattr(self, "ducker", None)
+            if ducker is not None:              # Musik leiser, solange das Mikro offen ist
+                (ducker.hold if s == "listening" else ducker.release)("mic")
         self.state = s
         self.last_activity = time.time()
 
@@ -2879,6 +2884,7 @@ class Walkie(QWidget):
             notify(t("Keine Tonausgabe gefunden 🔇"))
             return
         self.play_proc = player
+        self.ducker.hold("speak")
         if event_ts:
             player.first_audio = lambda: dbg(
                 f"{label}: {(time.time() - event_ts) * 1000:.0f} ms seit Auslöser")
@@ -2901,6 +2907,7 @@ class Walkie(QWidget):
             player.abort()
         finally:
             self.play_proc = None
+            self.ducker.release("speak")
 
     def stop_speaking(self):
         self.stop_flag = True
@@ -2968,6 +2975,7 @@ class Walkie(QWidget):
         steps = [("Brücke", self.bridge.stop, 1),
                  ("Aufnahme", lambda: self.rec_proc and self.rec_proc.stop(), 5),
                  ("Wiedergabe", self.stop_speaking, 2),
+                 ("Musiklautstärke", self.ducker.close, 3),
                  ("Headset", self.headset_audio.close, 10),
                  ("Fenster", self.surfaces.stop, 3)]
         if self.term.proc or self.has_terminal():
