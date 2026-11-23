@@ -7,6 +7,7 @@
 Figuren liegen im Repo (figures/, CC0) – eigene über „Eigener Ordner …“.
 Stimmen: https://huggingface.co/rhasspy/piper-voices
 """
+import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -27,6 +28,8 @@ def voice_path(name):
 def fetch(url, dest):
     if dest.exists() and dest.stat().st_size > 0:
         return
+    if os.environ.get("HF_HUB_OFFLINE", "").strip().upper() in {"1", "ON", "YES", "TRUE"}:
+        raise OSError(f"{dest.name} fehlt lokal (HF_HUB_OFFLINE)")
     tmp = dest.with_suffix(dest.suffix + ".part")
     req = urllib.request.Request(quote(url, safe=":/"), headers={"User-Agent": "walkie"})
     with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:

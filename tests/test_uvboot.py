@@ -26,7 +26,7 @@ class UvbootTest(unittest.TestCase):
                 continue
             got = subprocess.run(
                 ["sh", "-c", f'grep -A1 "\\"{name}\\":" "{ROOT}/uvboot.py" | tail -n 1 | tr -dc 0-9a-f'],
-                capture_output=True, text=True).stdout
+                capture_output=True, encoding="utf-8").stdout
             self.assertEqual(got, sha, name)
 
     def test_powershell_starter_regex_matches(self):

@@ -35,7 +35,7 @@ class BridgeTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.b = Bridge(str(self.tmp), ask_wait=lambda: 2)
         self.port = self.b.start()
-        info = json.loads((self.tmp / "server.json").read_text())
+        info = json.loads((self.tmp / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(info["port"], self.port)
         self.token = info["token"]
 
@@ -234,7 +234,7 @@ class TranscriptTest(unittest.TestCase):
             {"type": "user", "message": {"content": "The walkie plugin sent a message:\nLies vor"}},
             {"type": "assistant", "message": {"content": [{"type": "text", "text": "Bildschirm: 10 Min."}]}},
         ]
-        (root / "-home-x" / "S1.jsonl").write_text("\n".join(_j.dumps(x) for x in lines))
+        (root / "-home-x" / "S1.jsonl").write_text("\n".join(_j.dumps(x) for x in lines), encoding="utf-8")
         old = transcripts.PROJECTS
         transcripts.PROJECTS = root
         try:

@@ -19,13 +19,13 @@ import settings as S  # noqa: E402
 def env():
     e = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     e.update(WALKIE_CONFIG=str(TMP / "config.env"), WALKIE_RUN=str(TMP / "run"),
-             XDG_RUNTIME_DIR=str(TMP), NO_COLOR="1")
+             XDG_RUNTIME_DIR=str(TMP), NO_COLOR="1", PYTHONIOENCODING="utf-8")
     return e
 
 
 def walkie(*args):
     return subprocess.run([sys.executable, str(ROOT / "cli.py"), *args], capture_output=True,
-                          text=True, env=env(), timeout=20)
+                          encoding="utf-8", env=env(), timeout=20)
 
 
 class SettingsTest(unittest.TestCase):
@@ -54,14 +54,14 @@ class SettingsTest(unittest.TestCase):
         S.set("WALKIE_SCALE", 6)
         S.set("WALKIE_KEYS", {"PLAYPAUSE": {"long": "repeat"}})
         S.set("WALKIE_VOICE", "Français · Siwis (féminin)")
-        text = (TMP / "config.env").read_text()
+        text = (TMP / "config.env").read_text(encoding="utf-8")
         self.assertIn("WALKIE_SCALE=6", text)
         S.raw_values(force=True)
         self.assertEqual(S.get("WALKIE_SCALE"), 6)
         self.assertEqual(S.get("WALKIE_KEYS"), {"PLAYPAUSE": {"long": "repeat"}})
         self.assertEqual(S.get("WALKIE_VOICE"), "Français · Siwis (féminin)")
         S.reset("WALKIE_SCALE")
-        self.assertNotIn("WALKIE_SCALE", (TMP / "config.env").read_text())
+        self.assertNotIn("WALKIE_SCALE", (TMP / "config.env").read_text(encoding="utf-8"))
 
     def test_auto_talk_uses_selected_cli_and_honours_explicit_route(self):
         from unittest.mock import patch
@@ -86,14 +86,14 @@ class SettingsTest(unittest.TestCase):
             self.assertTrue(S.overridden("WALKIE_SCALE"))
         finally:
             del os.environ["WALKIE_SCALE"]
-        (TMP / "config.env").write_text("WALKIE_SCALE=kaputt\nWALKIE_VOICE='gibt es nicht'\n")
+        (TMP / "config.env").write_text("WALKIE_SCALE=kaputt\nWALKIE_VOICE='gibt es nicht'\n", encoding="utf-8")
         S.raw_values(force=True)
         self.assertEqual(S.get("WALKIE_SCALE"), 4)
         self.assertEqual(S.get("WALKIE_VOICE"), S.DEFAULT_VOICE)
 
     def test_live_reload(self):
         S.set("WALKIE_ANSWER_WINDOW", 8)
-        (TMP / "config.env").write_text("WALKIE_ANSWER_WINDOW=9\n")
+        (TMP / "config.env").write_text("WALKIE_ANSWER_WINDOW=9\n", encoding="utf-8")
         os.utime(TMP / "config.env", ns=(1, 2))      # andere mtime erzwingen
         S._cache["checked"] = 0
         self.assertEqual(S.get("WALKIE_ANSWER_WINDOW"), 9.0)
@@ -120,7 +120,9 @@ class CliTest(unittest.TestCase):
         self.assertIn("Unbekannte Einstellung", r.stderr)
 
     def test_list_json_for_agents(self):
-        data = json.loads(walkie("list", "--json").stdout)
+        result = walkie("list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
         keys = {s["key"] for s in data["settings"]}
         self.assertEqual(keys, set(S.BY_KEY))
         self.assertIn("talk", data["key_actions"])

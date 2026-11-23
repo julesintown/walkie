@@ -13,10 +13,11 @@
   walkie keys reset
   walkie voice list | use NAME    Stimmen (lädt fehlende herunter)
   walkie sprite installed | use ORDNER|NAME   Figur wechseln
-  walkie setup                    alles installieren (Python-Umgebung, Pakete, Modelle) + starten
+  walkie setup [--no-start] [--no-assets]   Umgebung und Pakete installieren, Modelle optional
+  walkie doctor [--allow-missing-agent]     Installation und Agent prüfen
   walkie drafts [clear]           ausstehende oder unbestätigte Diktate lesen (clear: löschen)
   walkie sessions                 welche Claude-Sessions der Walkie gerade kennt
-  walkie start | stop | restart | status | doctor | gui
+  walkie start | stop | restart | status | gui
   walkie agent-guide              Anleitung für KI-Agents (Claude, Codex, Gemini …)
 
 Gespeichert wird in ~/.config/walkie/config.env; der laufende Begleiter
@@ -25,7 +26,6 @@ Gespeichert wird in ~/.config/walkie/config.env; der laufende Begleiter
 import json
 import re
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -36,7 +36,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import keymap  # noqa: E402
 import settings as S  # noqa: E402
-from hook import LEARN_FLAG, LEARN_LOG, LOCK, RUN, walkie_running  # noqa: E402
+from hook import LEARN_FLAG, LEARN_LOG, RUN, bridge_ready, walkie_running  # noqa: E402
 
 INSTALL = RUN / "install"            # vom Begleiter beim Start geschrieben
 COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
@@ -623,12 +623,6 @@ def cmd_sprite_import(src, name=None):
 
 
 # ------------------------------------------------------------------ Begleiter
-def pid():
-    from hook import server_info
-    info = server_info() or {}
-    return info.get("pid")
-
-
 def bridge_post(path):
     """POST an den lokalen Dienst der laufenden App (z. B. /quit). True bei Erfolg."""
     import urllib.request
@@ -637,9 +631,9 @@ def bridge_post(path):
     info = server_info()
     if not info:
         return False
-    req = urllib.request.Request(f"http://127.0.0.1:{info['port']}{path}", data=b"{}",
-                                 headers={"x-walkie-token": info["token"]}, method="POST")
     try:
+        req = urllib.request.Request(f"http://127.0.0.1:{info['port']}{path}", data=b"{}",
+                                     headers={"x-walkie-token": info["token"]}, method="POST")
         with urllib.request.urlopen(req, timeout=3):
             return True
     except Exception:  # noqa: BLE001
@@ -714,15 +708,23 @@ def cmd_setup(args):
     ok("installiert")
 
     step(3, "Stimme laden")
-    voice = S.get("WALKIE_VOICE")
-    model = S.VOICES.get(voice, S.VOICES[S.DEFAULT_VOICE])[0]
-    subprocess.run([str(py), str(root / "fetch_assets.py"), "voices", model])
+    if "--no-assets" in args:
+        print("  Übersprungen (--no-assets)")
+    else:
+        voice = S.get("WALKIE_VOICE")
+        model = S.VOICES.get(voice, S.VOICES[S.DEFAULT_VOICE])[0]
+        if subprocess.run([str(py), str(root / "fetch_assets.py"), "voices", model]).returncode:
+            print(c("  ⚠ Stimme konnte nicht geladen werden. Vorlesen braucht diesen Download.", "33"))
 
     step(4, f"Spracherkennung laden (Whisper „{S.get('WALKIE_WHISPER')}“)")
-    code = ("from faster_whisper import WhisperModel; import sys; "
-            "WhisperModel(sys.argv[1], device='cpu', compute_type='int8'); print('ok')")
-    if subprocess.run([str(py), "-c", code, S.get("WALKIE_WHISPER")]).returncode != 0:
-        print(c("  ⚠ Modell lädt beim ersten Start nach", "33"))
+    if "--no-assets" in args:
+        print("  Übersprungen (--no-assets)")
+    else:
+        code = ("from faster_whisper import WhisperModel; import sys; "
+                "WhisperModel(sys.argv[1], device='cpu', compute_type='int8'); print('ok')")
+        if subprocess.run([str(py), "-c", code, S.get("WALKIE_WHISPER")]).returncode:
+            print(c("  ⚠ Whisper konnte nicht geladen werden. Die lokale Spracherkennung "
+                    "braucht dieses Modell.", "33"))
 
     if sys.platform == "darwin":                  # optional: Mikro mit Echounterdrückung
         import audio
@@ -730,44 +732,49 @@ def cmd_setup(args):
             ok("Mac-Mikrofon mit Echounterdrückung bereit (Einstellungen → experimentell)")
 
     step(5, "Prüfen und starten")
-    subprocess.run([str(py), str(root / "doctor.py")])
+    if subprocess.run([str(py), str(root / "doctor.py"), "--allow-missing-agent"]).returncode:
+        die("Einrichtung fehlgeschlagen. Die mit ✗ markierten Probleme oben beheben.")
     if "--no-start" not in args:
         if walkie_running():
             cmd_restart([])
         else:
             cmd_start([])
-        print("\n" + bold("Fertig!") + " Der Walkie führt dich jetzt durch Mikro und Kopfhörer.\n"
+        print("\n" + bold("Walkie gestartet.") + " Der Walkie führt dich jetzt durch Mikro und Kopfhörer.\n"
               "Reden: Kopfhörer-Play, Klick auf die Figur oder Strg+Alt+Leertaste.")
 
 
 def cmd_start(_args):
-    if walkie_running():
+    if bridge_ready():
         ok("läuft schon")
         return
     import paths
     paths.HERE = install_dir()
-    paths.launch("walkie.py")
-    for _ in range(100):
-        if walkie_running():
+    process = None if walkie_running() else paths.launch("walkie.py")
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if bridge_ready():
             ok("gestartet")
             return
+        if process and process.poll() not in (None, 0):
+            break
         time.sleep(0.2)
-    die("Start fehlgeschlagen – walkie doctor")
+    die(f"Start fehlgeschlagen – walkie doctor oder {RUN / 'walkie.log'} prüfen")
 
 
 def cmd_stop(_args):
-    p = pid()
     if not walkie_running():
         ok("läuft nicht")
         return
-    if not bridge_post("/quit") and p:           # sauber beenden, sonst hart
-        os.kill(p, signal.SIGTERM)
-    for _ in range(100):
+    requested = False
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if not requested:
+            requested = bridge_post("/quit")    # beim Start kann server.json noch fehlen
         if not walkie_running():
             ok("beendet")
             return
         time.sleep(0.2)
-    die("reagiert nicht")
+    die(f"reagiert nicht – siehe {RUN / 'walkie.log'}")
 
 
 def cmd_restart(args):
@@ -781,10 +788,10 @@ def cmd_status(_args):
     print(f"Einstellungen: {S.CONFIG}")
 
 
-def cmd_doctor(_args):
+def cmd_doctor(args):
     import paths
     paths.HERE = install_dir()
-    sys.exit(subprocess.call([paths.python(), str(install_dir() / "doctor.py")]))
+    sys.exit(subprocess.call([paths.python(), str(install_dir() / "doctor.py"), *args]))
 
 
 def cmd_gui(_args):

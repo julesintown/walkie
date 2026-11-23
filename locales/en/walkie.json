@@ -76,6 +76,7 @@
  "Sag bitte ja oder nein.": "Please say yes or no.",
  "Sprechen stoppen": "Stop speaking",
  "Stimme": "Voice",
+ "Spracherkennung nicht verfügbar. Bitte die Modelldateien mit walkie setup prüfen.": "Speech recognition is unavailable. Run walkie setup to check the speech models.",
  "Stimme konnte nicht geladen werden: {error}": "Couldn’t load the voice: {error}",
  "Terminal ausblenden": "Hide terminal",
  "Terminal schließen (Session beenden)": "Close terminal (end session)",

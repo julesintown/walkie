@@ -54,6 +54,7 @@ from i18n import Speech, lang, render, spoken_prompt, t  # noqa: E402
 from agents import make_agent  # noqa: E402
 from sprite import DOWN, DOWN_LEFT, DOWN_RIGHT, LEFT, RIGHT, Animator, SpriteSet  # noqa: E402
 from surfaces import Surfaces, ledges  # noqa: E402
+from transcription import HALLUCINATIONS, load_wav, transcribe  # noqa: E402
 
 # ---------------------------------------------------------------- Einstellungen
 # Einstellungen: settings.py (~/.config/walkie/config.env), live per S.get().
@@ -61,7 +62,7 @@ from surfaces import Surfaces, ledges  # noqa: E402
 WORKDIR = S.get("WALKIE_WORKDIR") or str(HERE)
 # "claude" = Claude Codes eingebautes Diktat (Tap-Modus), "whisper" = lokal
 STT_MODE = S.get("WALKIE_STT")
-from hook import ANSWERS, EVENTS, LEARN_FLAG, LEARN_LOG, LOCK, RUN  # noqa: E402
+from hook import ANSWERS, EVENTS, LEARN_FLAG, LEARN_LOG, RUN  # noqa: E402
 VOICE_FLAG = RUN / "voice_pending"
 WHISPER_MODEL = S.get("WALKIE_WHISPER")   # "small" = genauer, ~3x langsamer
 TERM_W, TERM_H = 680, 390            # Größe des Terminals in Pixeln
@@ -81,7 +82,7 @@ SLEEP_AFTER = 180                    # Sekunden ohne Aktivität -> einschlafen
 
 VOICE_DIR = HERE / "voices"
 VOICES = S.VOICES                # Name im Menü -> (Modelldatei, Aussprache)
-DEFAULT_VOICE = S.DEFAULT_VOICE
+MODEL_RETRY_SECONDS = 300
 # Agent-Zustand aus den Sessions: höchste Priorität gewinnt
 EVENT_STATE = {"ready": "idle", "prompt": "thinking", "tool": "thinking",
                "attention": "attention", "error": "error", "stop": "idle"}
@@ -111,10 +112,6 @@ SUMMARY_PROMPT = (
 # -> mindestens WINDOW s zuhören, solange gesprochen wird bis MAX verlängern.
 SESSION_TTL = 3600        # Sessions ohne Ereignis so lange vergessen
 STUCK_AFTER = 900         # "denkt" ohne jedes Ereignis -> vermutlich abgestürzt
-# Whisper erfindet bei Stille gern Floskeln -> verwerfen
-HALLUCINATIONS = re.compile(
-    r"^(untertitel.*|vielen dank( fürs zuschauen)?|danke( schön)?|tschüss|"
-    r"thank you( for watching)?|thanks for watching|you|bye|\.+|…)[.!?]*$", re.I)
 KITTY_SOCK = f"unix:{os.environ.get('XDG_RUNTIME_DIR', '/tmp')}/walkie-kitty"
 VOICE_MARK = "🎤"
 RING = QColor("#FF7A6B")
@@ -233,41 +230,6 @@ def speakable(text):
     text = re.sub(r"\b[0-9a-f]{7,40}\b", "", text)
     text = re.sub(r"(\w\.\w+):\d+(?::\d+)?\b", r"\1", text)      # datei.py:12 -> datei.py
     return re.sub(r"[ \t]{2,}", " ", text)
-
-
-def transcribe(model, wav, hint=None):
-    """Whisper-Text einer WAV-Datei: ohne Wiederholungen ("ja, ja, ja") und ohne die
-    typischen Stille-Halluzinationen. hint = erwartete Wörter (z. B. Optionen)."""
-    kw = {"initial_prompt": ". ".join(hint) + "."} if hint else {}
-    segs, _ = model.transcribe(load_wav(wav), language=S.get("WALKIE_LANG") or None,
-                               vad_filter=True, beam_size=1, condition_on_previous_text=False,
-                               **kw)
-    text = " ".join(s.text.strip() for s in segs).strip()
-    text = re.sub(r"\s*[\[(][^\])]{1,30}[\])]\s*", " ", text).strip()   # [Musik], (Stille) – aus VoiceMode
-    text = re.sub(r"\b((?:\w+\W+){0,2}?\w+)(?:[,.!]?\s+\1\b)+", r"\1", text, flags=re.I)
-    if hint and len(hint) > 1 and text.rstrip(".") == kw["initial_prompt"].rstrip("."):
-        return ""                                  # Stille: Whisper wiederholt nur den Hinweis
-    return "" if HALLUCINATIONS.match(text) else text
-
-
-def load_wav(path):
-    """WAV -> float32 mono 16 kHz (ohne PyAV)."""
-    import wave
-    import numpy as np
-    with wave.open(path, "rb") as w:
-        sr, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
-        raw = w.readframes(w.getnframes())
-    if not raw and os.path.getsize(path) > 44:  # Header evtl. nicht finalisiert
-        raw = Path(path).read_bytes()[44:]
-    dtype = {2: np.int16, 4: np.int32}[width]
-    a = np.frombuffer(raw[: len(raw) // (width * ch) * width * ch], dtype=dtype)
-    a = a.astype(np.float32) / float(np.iinfo(dtype).max)
-    if ch > 1:
-        a = a.reshape(-1, ch).mean(axis=1)
-    if sr != 16000 and len(a):
-        n = int(len(a) * 16000 / sr)
-        a = np.interp(np.linspace(0, len(a) - 1, n), np.arange(len(a)), a).astype(np.float32)
-    return a
 
 
 # --------------------------------------------------------------------------- #
@@ -456,7 +418,7 @@ LOG = RUN / "walkie.log"
 
 def dbg(msg):
     """Immer ins Log (RUN/walkie.log, ~1 MB), mit WALKIE_HEADSET_DEBUG auch auf die Konsole."""
-    line = f"{time.strftime('%F %X')} {msg}"
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
     if os.environ.get("WALKIE_HEADSET_DEBUG"):
         print("[dbg] " + line, flush=True)
     try:
@@ -771,8 +733,6 @@ class Walkie(QWidget):
         self.bus.listen_go.connect(self.listen_when_ready)
         self.bus.mic_ready.connect(lambda a: self.start_listening(*a, prepared=True))
         self.tray = None
-        if not LINUX:
-            self.setup_tray()
         self.pending = {}             # req -> offene Freigabe/Rückfrage einer Session
         self.answer_req = None        # gerade wird die Antwort auf diese Anfrage aufgenommen
         self.answer_done = threading.Event()
@@ -799,12 +759,8 @@ class Walkie(QWidget):
         self.term = Terminal()
         # Brücke zum Plugin-Mod jeder Claude-Session (lokaler HTTP-Dienst, plattformneutral)
         self.bridge = Bridge(str(RUN), ask_wait=lambda: S.get("WALKIE_ASK_WAIT"))
-        self.bus.quit.connect(QApplication.quit)
+        self.bus.quit.connect(QApplication.instance().quit, Qt.ConnectionType.QueuedConnection)
         self.bridge.on_quit = self.bus.quit.emit
-        try:
-            dbg(f"brücke auf port {self.bridge.start()}")
-        except OSError as ex:
-            dbg(f"brücke: {ex}")
         self.look = (S.sprite_dir(), S.get("WALKIE_SCALE"))
         self.anim = Animator(SpriteSet(*self.look))
 
@@ -835,8 +791,12 @@ class Walkie(QWidget):
         self.rec_file = None
         self.play_proc = None
         self.whisper = None
+        self.whisper_loading = True     # Start-Thread übernimmt den ersten Versuch
+        self.whisper_retry_at = 0.0
         self.piper = None
         self.voice_name = None
+        self.failed_voice = None
+        self.voice_retry_at = 0.0
         self.voice_lock = threading.Lock()
         self.ui_language = lang()
         self.settings_win = None
@@ -871,7 +831,15 @@ class Walkie(QWidget):
         self.rec_limit = QTimer(self, singleShot=True, timeout=self.stop_listening)
         self.level_timer = QTimer(self, timeout=self.check_silence)
         self.click_timer = QTimer(self, singleShot=True, timeout=self.on_click)
+        if not LINUX:
+            self.setup_tray()
         threading.Thread(target=self.load_whisper, daemon=True).start()
+        try:
+            dbg(f"brücke auf port {self.bridge.start()}")
+        except (OSError, RuntimeError) as ex:
+            dbg(f"Brücke konnte nicht starten: {ex!r}")
+            self.cleanup()
+            raise
 
     # ---------------- Bewegung & Animation ----------------
     def step(self):
@@ -1482,8 +1450,8 @@ class Walkie(QWidget):
             self.in_thread(self.set_voice, name)
         if not self.wander:
             self.target_x = None
-        if self.whisper is None and not getattr(self, "whisper_loading", True) \
-                and self.need_whisper():
+        if (self.whisper is None and not self.whisper_loading
+                and time.monotonic() >= self.whisper_retry_at and self.need_whisper()):
             self.whisper_loading = True               # Sprach-Antworten erst jetzt eingeschaltet
             self.in_thread(self.load_whisper)
 
@@ -1626,7 +1594,10 @@ class Walkie(QWidget):
         self.answer_req = answer
         if (answer or STT_MODE != "claude") and self.whisper is None:
             self.in_thread(beep, "busy")
-            notify(t("Ich wache gerade noch auf – Spracherkennung lädt …"))
+            if time.monotonic() < self.whisper_retry_at:
+                notify(t("Spracherkennung nicht verfügbar. Bitte die Modelldateien mit walkie setup prüfen."))
+            else:
+                notify(t("Ich wache gerade noch auf – Spracherkennung lädt …"))
             self.action = "LookUp"
             return
         if STT_MODE == "claude" and not answer and not (self.term.running()
@@ -2882,17 +2853,17 @@ class Walkie(QWidget):
             self.play_proc.abort()
 
     def load_whisper(self):
-        from faster_whisper import WhisperModel
-        name = S.get("WALKIE_VOICE")
-        if self.voice_name is None:
-            self.set_voice(name if name in VOICES else DEFAULT_VOICE)
-        if not self.need_whisper() or self.whisper is not None:
-            self.whisper_loading = False
-            return
-        self.whisper_loading = True
         try:
+            if not self.need_whisper() or self.whisper is not None:
+                return
+            from faster_whisper import WhisperModel
             self.whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8",
                                         cpu_threads=os.cpu_count() or 4)
+            self.whisper_retry_at = 0.0
+        except Exception as ex:
+            self.whisper_retry_at = time.monotonic() + MODEL_RETRY_SECONDS
+            dbg(f"Whisper ({WHISPER_MODEL}) konnte nicht geladen werden: {ex!r}. "
+                f"Nächster Versuch in {MODEL_RETRY_SECONDS} s.")
         finally:
             self.whisper_loading = False
 
@@ -2907,19 +2878,23 @@ class Walkie(QWidget):
         return S.get("WALKIE_VOICE_REPLY" if p.get("kind") == "reply" else "WALKIE_VOICE_ANSWER")
 
     def set_voice(self, name, demo=False):
-        from piper import PiperVoice
         model, phon = VOICES[name]
         path = VOICE_DIR / f"{model}.onnx"
         with self.voice_lock:
             if name != S.get("WALKIE_VOICE"):
                 return
             if name != self.voice_name:
+                if not demo and name == self.failed_voice and time.monotonic() < self.voice_retry_at:
+                    return
                 try:
+                    from piper import PiperVoice
                     if not path.is_file() or not path.with_suffix(".onnx.json").is_file():
                         import fetch_assets
                         fetch_assets.voices([model])
                     voice = PiperVoice.load(str(path))
                 except Exception as ex:
+                    self.failed_voice = name
+                    self.voice_retry_at = time.monotonic() + MODEL_RETRY_SECONDS
                     notify(t("Stimme konnte nicht geladen werden: {error}", error=ex))
                     return
                 if name != S.get("WALKIE_VOICE"):
@@ -2927,21 +2902,41 @@ class Walkie(QWidget):
                 if phon:
                     voice.config.espeak_voice = phon
                 self.piper, self.voice_name = voice, name
+                self.failed_voice = None
         if demo:
             self.stop_speaking()
             self.speak(t("Hallo, so klinge ich jetzt."))
 
     def cleanup(self):
-        """Beim Beenden: jeder Schritt einzeln abgesichert – ein Fehler hält den Rest nicht auf."""
+        """Native Aufräumarbeiten begrenzen, solange das Instanz-Lock noch gehalten wird."""
         self.device_stop.set()
         self.key_reader.join(timeout=0.25)
-        for step in (self.bridge.stop,
-                     lambda: self.rec_proc and self.rec_proc.stop(),
-                     self.headset_audio.close, self.stop_speaking, self.term.close, self.surfaces.stop):
-            try:
-                step()
-            except Exception as ex:  # noqa: BLE001
-                dbg(f"beenden: {ex!r}")
+        steps = [("Brücke", self.bridge.stop, 1),
+                 ("Aufnahme", lambda: self.rec_proc and self.rec_proc.stop(), 5),
+                 ("Wiedergabe", self.stop_speaking, 2),
+                 ("Headset", self.headset_audio.close, 10),
+                 ("Fenster", self.surfaces.stop, 3)]
+        if self.term.proc or self.has_terminal():
+            steps.append(("Terminal", self.term.close, 3))
+        for name, step, timeout in steps:
+            stop_with_timeout(name, step, timeout, dbg)
+
+
+def stop_with_timeout(name, step, timeout, log):
+    def run():
+        try:
+            step()
+        except Exception as ex:  # noqa: BLE001 – unabhängige Ressourcen weiter freigeben
+            log(f"Beenden {name}: {ex!r}")
+        else:
+            log(f"Beenden {name}: fertig")
+
+    log(f"Beenden {name}: startet")
+    worker = threading.Thread(target=run, name=f"stop-{name}", daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        log(f"Beenden {name}: Zeitlimit nach {timeout}s")
 
 
 _LOCK = None
@@ -2973,7 +2968,11 @@ def main():
     app.setApplicationName("Walkie")
     app.setDesktopFileName("walkie")
     app.setQuitOnLastWindowClosed(False)
-    walkie = Walkie()
+    try:
+        walkie = Walkie()
+    except Exception as ex:  # noqa: BLE001 – auch gestartete native Threads zuverlässig beenden
+        dbg(f"Start fehlgeschlagen: {ex!r}")
+        os._exit(1)
     app.setWindowIcon(QIcon(walkie.anim.s.anims["Idle"].frame(0, 0)))   # Icon = die Figur
     walkie.show()
     app.aboutToQuit.connect(walkie.cleanup)
@@ -2983,8 +2982,11 @@ def main():
     code = app.exec()                       # aboutToQuit hat schon aufgeräumt (cleanup)
     # Hart beenden: Hintergrund-Threads fremder Bibliotheken (z. B. der Hotkey-Listener)
     # dürfen das Beenden nicht ewig aufhalten – genau das ist passiert.
-    sys.stdout.flush()
-    os._exit(code)
+    try:
+        if sys.stdout is not None:          # pythonw auf Windows hat keine Konsole
+            sys.stdout.flush()
+    finally:
+        os._exit(code)                      # Betriebssystem gibt auch das Instanz-Lock frei
 
 
 if __name__ == "__main__":

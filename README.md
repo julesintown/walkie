@@ -81,6 +81,14 @@ On Windows, run `bin\walkie.cmd setup` in the cloned folder. Setup can download 
 [uv](https://github.com/astral-sh/uv) if needed. Use `walkie start` to bring the figure back later.
 From the repository, use `./bin/walkie start` on Linux/macOS or `bin\walkie.cmd start` on Windows.
 
+For a headless installation, run `walkie setup --no-start --no-assets`. This installs and checks
+the Python packages and skips the Piper voice and Whisper model downloads. Walkie can fetch missing
+models when it runs. Set `HF_HUB_OFFLINE=1` to use only local speech assets. Run `walkie setup`
+again with network access to add them. Setup reports missing speech assets or an agent CLI as
+warnings and exits with an error if the required installation checks fail. To run the same checks
+later, use `walkie doctor --allow-missing-agent`. Plain `walkie doctor` also requires the selected
+agent CLI.
+
 **Optional Codex CLI plugin** for session events:
 
 ```sh
@@ -169,7 +177,8 @@ python -m unittest discover -s tests      # app, bridge, router, settings, soak 
 claude plugin validate . && claude plugin test .   # the plugin module
 ```
 
-The CI workflow (`.github/workflows/tests.yml`) runs the tests and the real first-run `walkie setup`
-on Ubuntu, macOS and Windows.
+CI runs the Python suite on 3.10 and 3.13 and checks setup, start, bridge access and stop on
+Ubuntu, macOS and Windows. Ubuntu also loads both speech models offline after setup. The plugin
+job uses Claude Code 2.1.330 to validate the manifests and run the TypeScript hook tests.
 
 License: [MIT](LICENSE). Figures: CC0 (see `figures/CREDITS.md`). Voices: [Piper](https://github.com/rhasspy/piper); speech recognition: [faster-whisper](https://github.com/SYSTRAN/faster-whisper).

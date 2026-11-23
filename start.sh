@@ -10,7 +10,7 @@ done
 # keine Variablen einer evtl. umgebenden Claude-Code-Session erben
 for v in $(env | grep -oE '^CLAUDE[A-Z_]*'); do unset "$v"; done
 case "${1:-}" in
-  --doctor)   exec "$py" "$here/doctor.py" ;;
+  --doctor)   shift; exec "$py" "$here/doctor.py" "$@" ;;
   --settings) exec "$py" "$here/settings_gui.py" ;;
 esac
 exec "$py" "$here/walkie.py" "$@"

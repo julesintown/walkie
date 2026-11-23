@@ -87,8 +87,7 @@ export async function confirmDelivery(id: string, saved: unknown, submit: () => 
 
 // submit() resolves with { drop } when the engine refuses the prompt. That is no delivery:
 // the caller keeps the dictation in the Walkie and tries again on a later poll.
-export async function submitVoice($: EngineInterface, text: string) {
-  const res = await $.prompt.submit({ text })
+export function checkVoiceSubmission(res: Awaited<ReturnType<EngineInterface['prompt']['submit']>>) {
   if (res?.drop !== undefined) throw new Error(`prompt dropped: ${res.drop}`)
 }
 
@@ -111,7 +110,7 @@ async function pollInbox($: EngineInterface) {
         const previous = voiceTurn
         voiceTurn = true
         try {
-          await submitVoice($, item.text)
+          checkVoiceSubmission(await $.prompt.submit({ text: item.text }))
         } catch (error) {
           voiceTurn = previous
           retryAt = Date.now() + 3000

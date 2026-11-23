@@ -82,6 +82,14 @@ Unter Windows im geklonten Ordner `bin\walkie.cmd setup` ausführen. Die Einrich
 Python über [uv](https://github.com/astral-sh/uv). Später startet `walkie start` die Figur erneut.
 Unter Linux/macOS funktioniert im Repo auch `./bin/walkie start`, unter Windows `bin\walkie.cmd start`.
 
+Für eine Einrichtung ohne Fenster und Modelldownloads gibt es `walkie setup --no-start --no-assets`.
+Dabei werden die Python-Pakete installiert und geprüft. Beim Start kann Walkie fehlende Stimmen und
+Whisper-Modelle nachladen. Mit `HF_HUB_OFFLINE=1` verwendet Walkie nur lokale Sprachmodelle.
+Ein erneutes `walkie setup` mit Internetzugang lädt sie nach. Fehlende Modelle oder eine fehlende
+Agent-CLI meldet Setup als Warnung. Fehler bei den Pflichtprüfungen führen zum Abbruch. Dieselben
+Prüfungen lassen sich mit `walkie doctor --allow-missing-agent` wiederholen. `walkie doctor` ohne
+Option verlangt zusätzlich die ausgewählte Agent-CLI.
+
 **Optionales Codex-CLI-Plugin** für Session-Ereignisse:
 
 ```sh
@@ -170,7 +178,9 @@ python -m unittest discover -s tests      # App, Brücke, Router, Einstellungen,
 claude plugin validate . && claude plugin test .   # das Plugin-Modul
 ```
 
-Der CI-Workflow (`.github/workflows/tests.yml`) führt die Tests und den echten Erstnutzer-Weg
-`walkie setup` auf Ubuntu, macOS und Windows aus.
+Die CI führt die Python-Tests mit 3.10 und 3.13 aus und prüft Einrichtung, Start, Zugriff auf die
+Brücke und Stopp auf Ubuntu, macOS und Windows. Ubuntu lädt anschließend beide Sprachmodelle
+offline aus der Installation. Der Plugin-Job validiert mit Claude Code 2.1.330 die Manifeste
+und führt die TypeScript-Hook-Tests aus.
 
 Lizenz: [MIT](LICENSE). Figuren: CC0 (siehe `figures/CREDITS.md`). Stimmen: [Piper](https://github.com/rhasspy/piper); Spracherkennung: [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
