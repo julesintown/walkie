@@ -1,13 +1,13 @@
 # Mitgelieferte Figuren
 
 Fuchs, Frosch und Schleim stammen aus frei lizenzierten Pixel-Art-Paketen
-(**CC0 1.0 – Public Domain**); Rußpelz siehe Tabelle. Sie wurden mit `tools/make_figures.py` ins
+(**CC0 1.0 – Public Domain**); Walkie siehe Tabelle. Sie wurden mit `tools/make_figures.py` ins
 8-Richtungen-Format des Begleiters umgebaut (Seitenansicht, gespiegelt).
 Namensnennung ist nicht nötig, aber verdient:
 
 | Ordner | Figur | Quelle | Autor | Lizenz |
 |---|---|---|---|---|
-| `russpelz/` | Rußpelz (Standard) | eigenes Design für Walkie, als Shimeji importiert (`walkie sprite import`) | julesintown | MIT (wie das Repo) |
+| `walkie/` | Walkie (Standard) | eigenes Design für Walkie, als Shimeji importiert (`walkie sprite import`) | julesintown | MIT (wie das Repo) |
 | `fox/` | Fuchs | [Sunny Land](https://opengameart.org/content/sunny-land-2d-pixel-art-assets) | ansimuz | CC0 1.0 |
 | `frog/` | Frosch | [Sunny Land](https://opengameart.org/content/sunny-land-2d-pixel-art-assets) | ansimuz | CC0 1.0 |
 | `slime/` | Schleim | [Pixel Art Animated Slime](https://opengameart.org/content/pixel-art-animated-slime) | rvros | CC0 1.0 |

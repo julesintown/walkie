@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_FIGURE = HERE / "figures" / "russpelz"
+DEFAULT_FIGURE = HERE / "figures" / "walkie"
 CONFIG = Path(os.environ.get("WALKIE_CONFIG") or Path(
     os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "walkie" / "config.env")
 
@@ -130,7 +130,7 @@ SCHEMA = [
 
     # ---- Figur
     Setting("WALKIE_SPRITE", "path", "", "figure", "Figur (Sprite-Ordner)",
-            "Leer = Rußpelz. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md)."),
+            "Leer = Walkie. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md)."),
     Setting("WALKIE_SCALE", "int", 4, "figure", "Größe", "Pixel-Vergrößerung.", min=2, max=8),
 
     # ---- Kopfhörer
@@ -490,4 +490,10 @@ def side_effects(key, value):
 
 def sprite_dir():
     p = get("WALKIE_SPRITE")
-    return Path(p).expanduser() if p else DEFAULT_FIGURE
+    if not p:
+        return DEFAULT_FIGURE
+    path = Path(p).expanduser()
+    # Die Standardfigur hieß früher figures/russpelz; alte Configs landen jetzt auf figures/walkie.
+    if path.name == "russpelz" and not path.exists():
+        return DEFAULT_FIGURE
+    return path

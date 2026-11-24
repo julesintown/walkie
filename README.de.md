@@ -187,7 +187,7 @@ walkie start | stop | restart | status | doctor
 
 ## Figuren
 
-Rußpelz (Standard, ein Shimeji mit Kletter-, Decken- und Kantenposen), dazu Fuchs, Frosch und
+Walkie (Standard, ein Shimeji mit Kletter-, Decken- und Kantenposen), dazu Fuchs, Frosch und
 Schleim – freie Pixel-Art (CC0), mit `tools/make_figures.py` umgebaut. Quellen in `figures/CREDITS.md`. Eigene Figuren: jeder Ordner mit `AnimData.xml` und
 `<Animation>-Anim.png` (8 Richtungen) über *Einstellungen → Figur → Eigener Ordner*.
 

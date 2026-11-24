@@ -184,7 +184,7 @@ walkie start | stop | restart | status | doctor
 
 ## Figures
 
-Rußpelz (default, a Shimeji with climbing, ceiling and edge poses), plus fox, frog and slime –
+Walkie (default, a Shimeji with climbing, ceiling and edge poses), plus fox, frog and slime –
 free pixel art (CC0) converted by `tools/make_figures.py`. Sources in `figures/CREDITS.md`. Your own figures: any folder with `AnimData.xml` and
 `<Animation>-Anim.png` sheets (8 directions) via *Settings → Figure → Own folder*.
 

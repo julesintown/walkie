@@ -1256,6 +1256,9 @@ class WalkieTest(unittest.TestCase):
         for d in figs:
             s = SpriteSet(d, scale=1)
             self.assertTrue(s.has("Idle") and s.has("Walk"), d)
+            # In Originalauflösung vergleichen: weiches Herunterskalieren um krumme
+            # Faktoren (Shimejis) rundet links und rechts minimal unterschiedlich.
+            s = SpriteSet(d, scale=1 / s.scale)
             r = s.anims["Walk"].frame(RIGHT, 0).toImage()
             left = s.anims["Walk"].frame(LEFT, 0).toImage()
             self.assertEqual(r.mirrored(True, False), left, d)

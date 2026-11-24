@@ -126,6 +126,6 @@
  "Ins Panel-Terminal über der Figur (braucht kitty und das Panel)": "To the panel terminal above the figure (needs kitty and the panel)",
  "Terminal als Panel über der Figur": "Terminal as a panel above the figure",
  "Nur Linux mit kitty: ein randloses Terminal direkt über der Figur statt eines normalen Terminalfensters.": "Linux with kitty only: a borderless terminal right above the figure instead of a normal terminal window.",
- "Leer = Rußpelz. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md).": "Empty = Rußpelz. Folder with AnimData.xml + *-Anim.png (see figures/CREDITS.md).",
+ "Leer = Walkie. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md).": "Empty = Walkie. Folder with AnimData.xml + *-Anim.png (see figures/CREDITS.md).",
  "Jede Antwort deiner Sessions vorlesen – auch auf getippte Nachrichten. Aus: nur kurze Ansagen, wenn etwas fertig ist.": "Read every answer of your sessions aloud – also to typed messages. Off: only short announcements when something is done."
 }
