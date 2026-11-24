@@ -880,7 +880,7 @@ class Walkie(QWidget):
 
         self.panel = None
         self.refresh_panel()
-        g = QApplication.primaryScreen().geometry()
+        g = QApplication.primaryScreen().availableGeometry()
         self.move(g.right() - self.SIZE - 60, g.bottom() - self.SIZE + 6)
         # Klettern, Fensterkanten, Schwerkraft (climber.py / surfaces.py)
         self.climb = climber.Climber()
@@ -973,7 +973,7 @@ class Walkie(QWidget):
                 180: (-r, -b, -l, -t)}[rot]
 
     def climb_env(self):
-        g = (self.screen() or QApplication.primaryScreen()).geometry()
+        g = (self.screen() or QApplication.primaryScreen()).availableGeometry()
         screen = (g.left(), g.top(), g.right(), g.bottom())
         wins = self.surfaces.wins
         a = self.anim.s
@@ -993,7 +993,7 @@ class Walkie(QWidget):
         if not self.climbing_on:
             return
         l, t, r, b = self.rot_bbox(*self.pose("wall", side, moving=True))
-        g = (self.screen() or QApplication.primaryScreen()).geometry()
+        g = (self.screen() or QApplication.primaryScreen()).availableGeometry()
         self.climb.climb(side, self.x() + self.SIZE / 2, g.bottom() - 6 - (b - t) / 2)
         dbg(f"klettern: floor -> wall ({side})")
 
@@ -1194,10 +1194,13 @@ class Walkie(QWidget):
 
     def walk_range(self):
         """Erlaubter x-Bereich: unten rechts neben der KDE-Leiste, sonst ganze Breite."""
-        g = (self.screen() or QApplication.primaryScreen()).geometry()
+        g = (self.screen() or QApplication.primaryScreen()).availableGeometry()
         lo, hi = g.left() + 10, g.right() - self.SIZE - 10
         p = self.panel
-        if p and self.y() + self.SIZE > g.bottom() - p["h"] - 20:
+        full = (self.screen() or QApplication.primaryScreen()).geometry()
+        # Reserviert die Leiste ihren Platz, läuft die Figur oben auf ihr; nur eine Leiste, die
+        # über dem Boden schwebt (KDE ohne Platzreservierung), muss sie umgehen
+        if p and g.bottom() >= full.bottom() - 4 and self.y() + self.SIZE > g.bottom() - p["h"] - 20:
             lo = max(lo, p["right"] + 8)
         return lo, max(lo, hi)
 
@@ -1212,7 +1215,7 @@ class Walkie(QWidget):
         if not self.wander or random.random() < 0.5:
             return
         lo, hi = self.walk_range()
-        g = (self.screen() or QApplication.primaryScreen()).geometry()
+        g = (self.screen() or QApplication.primaryScreen()).availableGeometry()
         if self.climbing_on and random.random() < CLIMB_CHANCE:
             # zur nächsten freien Bildschirmkante laufen (links nur, wenn keine Leiste im Weg)
             sides = [("right", hi)] + ([("left", lo)] if lo <= g.left() + 10 else [])
@@ -1632,7 +1635,7 @@ class Walkie(QWidget):
             seen += max(0, r.width()) * max(0, r.height())
         if seen * 3 >= area:
             return
-        g = QApplication.primaryScreen().geometry()
+        g = QApplication.primaryScreen().availableGeometry()
         dbg(f"figur außerhalb des Bildschirms ({me.x()}, {me.y()}) – zurück nach unten rechts")
         self.climb.to_floor()
         self.target_x = self.climb_to = None
