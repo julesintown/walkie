@@ -709,6 +709,14 @@ class SettingsWindow(QWidget):
 
     def page_general(self):
         pg = self.page(t("Allgemein"), t("Wer im Terminal arbeitet und wann der Begleiter startet."))
+        c = self.card(pg, t("Schnell prüfen"))
+        mic = QPushButton(t("Mikrofon testen"), objectName="primary")
+        mic.clicked.connect(lambda: self.test_mic_now())
+        guide = QPushButton(t("Erste Schritte wiederholen"))
+        guide.clicked.connect(self.start_setup)
+        self.add_row(c, t("Mikrofon & Einrichtung"),
+                     t("Kurze Probeaufnahme mit Pegel und erkanntem Text – zum Beispiel nachdem "
+                       "du einen Kopfhörer verbunden hast."), hbox(mic, guide))
         c = self.card(pg, t("Begleiter"))
         self.setting_row(c, "WALKIE_UI_LANG")
         self.setting_row(c, "WALKIE_NAME")
@@ -1006,6 +1014,18 @@ class SettingsWindow(QWidget):
         box.setCurrentIndex(max(0, box.findData(cur)))
         box.blockSignals(False)
 
+    def test_mic_now(self):
+        """Zur Seite mit dem Mikrofon wechseln, die Geräteliste auffrischen (ein eben
+        verbundener Kopfhörer) und die Probeaufnahme gleich starten."""
+        if self.setup_mode:
+            self.goto_step(self.STEPS.index("mic") if "mic" in self.STEPS else self.step)
+        else:
+            self.goto("voice")
+        if crashguard.alive(getattr(self, "mic_box", None)):
+            self.fill_mics()
+        if crashguard.alive(getattr(self, "test_btn", None)) and self.test_btn.isEnabled():
+            self.test_mic()
+
     def test_mic(self):
         cmd_dev = S.get("WALKIE_MIC") or None
         fd, wav = tempfile.mkstemp(suffix=".wav", prefix="walkie-test-")
@@ -1021,7 +1041,8 @@ class SettingsWindow(QWidget):
             self.test_result.setText(t("Mikrofon lässt sich nicht öffnen: {error}", error=self.rec.error))
             return
         self.test_btn.setEnabled(False)
-        self.test_result.setText(t("Sprich jetzt …"))
+        self.test_device = cmd_dev or audio.default_input_name() or t("Systemstandard")
+        self.test_result.setText(t("Sprich jetzt … ({device})", device=self.test_device))
         self.rec_wav, self.rec_pos, self.rec_t0, self.rec_headset = wav, 44, time.time(), headset
         self.peak = 0.0
         self.rec_timer = QTimer(self, timeout=self.rec_tick)
@@ -1073,7 +1094,10 @@ class SettingsWindow(QWidget):
         if isinstance(text, Exception):
             self.test_result.setText(t("Fehler: {error}", error=text))
             return
-        hint = ("  " + t("Sehr leise – ein anderes Mikro wählen?") if self.peak < 0.01 else "")
+        hint = ("  " + t("Vom Mikrofon kommt nichts an – ein anderes wählen?")
+                if self.peak < 0.002 else
+                "  " + t("Sehr leise – ein anderes Mikro wählen?") if self.peak < 0.01 else "")
+        hint += "\n" + t("Gerät: {device}", device=getattr(self, "test_device", "") or "?")
         self.test_result.setText(t("Erkannt: „{text}“  (Pegel {peak}).", text=text or t("…nichts…"),
                                    peak=f"{self.peak:.3f}") + hint)
 

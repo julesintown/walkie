@@ -90,6 +90,16 @@ def truncate_wav(path, nbytes):
         pass
 
 
+def copy_wav(src, dst, nbytes):
+    """The first nbytes of audio of a (growing) WAV recording as a finished WAV file."""
+    nbytes -= nbytes % 2
+    with open(src, "rb") as f:
+        f.seek(44)
+        data = f.read(nbytes)
+    with open(dst, "wb") as f:
+        f.write(_wav_header(len(data)) + data)
+
+
 def _wav_header(nbytes=0x7FFFFFFF):
     return (b"RIFF" + struct.pack("<I", 36 + nbytes) + b"WAVEfmt " +
             struct.pack("<IHHIIHH", 16, 1, 1, RATE, RATE * 2, 2, 16) +
@@ -579,6 +589,22 @@ def _mac_mic_busy():
                                      ctypes.byref(running)):
         return False
     return bool(running.value)
+
+
+def default_input_name():
+    """Name des Standard-Mikrofons (zeigt, welches Gerät „Systemstandard“ gerade ist) – oder ""."""
+    try:
+        if sys.platform.startswith("linux") and shutil.which("pactl"):
+            name = subprocess.run(["pactl", "get-default-source"], capture_output=True,
+                                  text=True, timeout=3).stdout.strip()
+            labels = dict(_pactl_sources())
+            return labels.get(name, name)
+        for d in _devices()[0]:
+            if d.get("is_default"):
+                return d.get("name", "")
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
 
 
 def default_output_name():

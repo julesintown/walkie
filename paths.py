@@ -42,6 +42,13 @@ def clean_env():
     return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
 
 
+def no_window():
+    """Windows: Hintergrundprogramme (claude.cmd, agy.exe, git …) ohne eigenes Konsolenfenster
+    starten. Der Walkie läuft unter pythonw ohne Konsole; sonst öffnet jeder Aufruf ein leeres
+    Fenster mit dem Programmpfad als Titel."""
+    return {"creationflags": subprocess.CREATE_NO_WINDOW} if WIN else {}
+
+
 def launch(script, *args):
     """Skript des Walkies losgelöst starten (kein Konsolenfenster unter Windows)."""
     kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,

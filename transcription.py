@@ -40,7 +40,7 @@ def transcribe(model, wav, hint=None):
     Wortsalat. Saubere Aufnahmen erkennt es beim ersten Versuch, dort ändert sich nichts."""
     kw = {"initial_prompt": ". ".join(hint) + "."} if hint else {}
     audio = load_wav(wav)
-    segs, _ = model.transcribe(audio, language=S.get("WALKIE_LANG") or None,
+    segs, _ = model.transcribe(audio, language=S.stt_language(),
                                vad_filter=True, beam_size=1, condition_on_previous_text=False,
                                temperature=0.0, max_new_tokens=max_tokens(len(audio) / 16000),
                                **kw)

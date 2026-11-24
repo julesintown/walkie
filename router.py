@@ -52,6 +52,9 @@ Targets:
   user wants the session itself to explain, check, change or do something does it go to that
   session.
 - "self": small talk, short knowledge or research questions (the assistant can search the web).
+  If you can answer it well right away without the web or current data (small talk, a sound or
+  microphone check, a general knowledge question), also give the spoken answer in "reply": at
+  most 4 short sentences, natural, in the user's language, no markdown. Otherwise "reply": "".
   NOT feedback, ideas or questions about the voice
   assistant itself, its behaviour or its settings: those belong to the session "in_conversation"
   (the user is probably developing or testing it there).
@@ -94,7 +97,8 @@ stay close to the wording.
 
 Answer ONLY with JSON, e.g. {{"target": "<session-id>", "message": "..."}},
 {{"target": "new", "explicit": true, "message": "..."}},
-{{"target": "new", "folder": "<folder>", "message": "..."}}, {{"target": "self", "message": "..."}},
+{{"target": "new", "folder": "<folder>", "message": "..."}},
+{{"target": "self", "message": "...", "reply": "..."}},
 {{"target": "overview", "message": "..."}},
 {{"target": "show", "session": "<id>"}}, {{"target": "direct", "session": "<id>", "message": ""}},
 {{"target": "direct_end"}},
@@ -292,6 +296,7 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
     order = brains(env)
     order.sort(key=lambda b: _brain_down.get(b, 0) > time.time())    # stable: healthy first
     for brain in order:
+        started = time.monotonic()
         try:
             if brain == "codex":
                 out = _codex(prompt, env, cwd, timeout, settings.get("WALKIE_CODEX_MODEL"))
@@ -304,6 +309,7 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
                                "--strict-mcp-config"], prompt, env, cwd,
                               timeout)
             _brain_down.pop(brain, None)
+            log(f"{brain}: {time.monotonic() - started:.1f} s")
             return out
         except Exception as ex:  # noqa: BLE001 – next brain
             log(f"{brain}: {ex}")
@@ -323,6 +329,8 @@ def _run(argv, **kw):
     exe = shutil.which(argv[0], path=(kw.get("env") or os.environ).get("PATH")) or argv[0]
     env = dict(kw.pop("env", None) or os.environ)
     env["WALKIE_HOOK_QUIET"] = "1"       # the agent's global Walkie hooks stay silent
+    import paths
+    kw.update(paths.no_window())          # Windows: no empty console window per call
     return subprocess.run([exe, *argv[1:]], env=env, encoding="utf-8", errors="replace", **kw)
 
 
@@ -357,7 +365,11 @@ def _codex(prompt, env, cwd, timeout, model):
         Path(out).unlink(missing_ok=True)
 
 
-NEWER_FLAGS = {"--tools": 1, "--no-session-persistence": 0, "--strict-mcp-config": 0}   # Flag -> Anzahl Werte
+NEWER_FLAGS = {"--tools": 1, "--no-session-persistence": 0, "--strict-mcp-config": 0,
+               "--disable-slash-commands": 0}   # Flag -> Anzahl Werte
+# The Walkie's own model calls need no MCP servers, skills or slash commands. Connecting the
+# user's MCP servers alone costs 1.5-4 s per call (measured with claude 2.1).
+LEAN = ["--strict-mcp-config", "--disable-slash-commands"]
 
 
 def _without_newer_flags(args):
@@ -374,6 +386,7 @@ def _without_newer_flags(args):
 
 
 def _claude(args, prompt, env, cwd, timeout):
+    args = [*args, *LEAN]
     r = _run([brain_bin("claude"), "-p", *args], input=prompt, capture_output=True,
              timeout=timeout, env=env, cwd=cwd)
     err = (r.stderr or r.stdout or "").strip()
@@ -472,8 +485,8 @@ def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: 
                 return new, None, msg
             log(f"router: „new“ ohne Wunsch/Ordner verworfen ({got.get('folder')!r})")
             return "session", direct or thread or latest(sessions), msg
-        if target == "self":
-            return "self", None, msg
+        if target == "self":                        # target: a ready spoken answer, if any
+            return "self", str(got.get("reply") or "").strip() or None, msg
         if target == "overview":
             return "overview", None, msg
         if target == "ask":
@@ -502,7 +515,8 @@ def with_wording(message, spoken):
     return f"{message}\n\n(Spoken, per speech recognition: \"{spoken.strip()}\")"
 
 
-def ask_self(text, run_dir, name, sessions, env=None, cwd=None, model="haiku"):
+def ask_self(text, run_dir, name, sessions, env=None, cwd=None, model="haiku",
+             log=lambda m: None):
     """Antwort des Walkies selbst, mit Gedächtnis über eine fortgesetzte Unterhaltung."""
     store = Path(run_dir) / "self-session"
     try:
@@ -514,8 +528,9 @@ def ask_self(text, run_dir, name, sessions, env=None, cwd=None, model="haiku"):
     order = brains(env)
     if order and order[0] != "claude":
         try:
-            return ask_model(f"{system}\n\n{text}", env, cwd, 120)
-        except Exception:  # noqa: BLE001
+            return ask_model(f"{system}\n\n{text}", env, cwd, 120, log=log)
+        except Exception as ex:  # noqa: BLE001
+            log(f"self: {ex}")
             return ""
     args = ["--model", model, "--output-format", "json",
             "--allowedTools", "WebSearch", "WebFetch",       # darf recherchieren, sonst nichts
@@ -523,13 +538,16 @@ def ask_self(text, run_dir, name, sessions, env=None, cwd=None, model="haiku"):
     for attempt in ([*args, "--resume", sid] if sid else None, args):
         if attempt is None:
             continue
+        started = time.monotonic()
         try:
             data = json.loads(_claude(attempt, text, env, cwd, timeout=180))
+            log(f"self: claude {time.monotonic() - started:.1f} s")
             if data.get("session_id"):
                 Path(run_dir).mkdir(parents=True, exist_ok=True)
                 store.write_text(data["session_id"], encoding="utf-8")
             return (data.get("result") or "").strip()
-        except Exception:  # noqa: BLE001 – z. B. alte Unterhaltung weg -> neu anfangen
+        except Exception as ex:  # noqa: BLE001 – z. B. alte Unterhaltung weg -> neu anfangen
+            log(f"self: claude {ex}")
             continue
     return ""
 

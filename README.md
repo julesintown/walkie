@@ -133,7 +133,7 @@ Claude dictation, the command shows the path to the recording.
 | | Status |
 |---|---|
 | **Linux – KDE Plasma** (Wayland/X11, PipeWire) | developed and used daily |
-| **Linux – GNOME and others** | should work; window edges only on X11 with `wmctrl`, no "show me that" on GNOME Wayland |
+| **Linux – GNOME and others** | should work; window edges only on X11, no "show me that" on GNOME Wayland |
 | **Windows 10/11** | test suite, start/stop, music ducking and thinking models (`claude`, `agy`) checked on Windows 11; headphone keys via media keys |
 | **WSL2 (WSLg)** | works; `walkie setup` installs missing Qt system libraries (e.g. `libxcb-icccm4`, `libxcb-keysyms1`) |
 | **macOS** | experimental – not yet tested on real hardware; needs microphone and accessibility permissions |
@@ -194,7 +194,7 @@ are – with their own climbing, ceiling and sitting-on-the-edge poses:
     walkie sprite import ~/Downloads/some-shimeji.zip my-shimeji
 
 Figures without climbing poses climb rotated. Window edges work on KDE (Wayland or X11), macOS
-(system window list, no extra permission) and X11 desktops with `wmctrl`; elsewhere the figure
+(system window list, no extra permission), Windows, WSL (WSLg and xrdp) and every X11 desktop; elsewhere the figure
 uses floor, screen edges and top only.
 
 ## Development

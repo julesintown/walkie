@@ -70,6 +70,7 @@ ANIM_SPEED = 1.2                     # Spiel-Frames (1/60 s) pro Tick (33 ms); 2
 WALK_SPEED = 1                       # Pixel pro Tick
 WANDER_EVERY_MS = 12000
 ACTION_CHANCE = 0.15
+MIC_DEAD = 0.002                     # darunter liefert das Mikro praktisch nur Nullen
 QUIET_PEAK = 0.008                   # absoluter Ersatz, wenn die adaptive Erkennung nichts meldet
 CLIMB_CHANCE = 0.12                  # je Wander-Runde: zur Bildschirmkante laufen und hochklettern
 LINUX = sys.platform.startswith("linux")   # Bluetooth-Profil, MPRIS, evdev: nur Linux
@@ -1001,8 +1002,9 @@ class Walkie(QWidget):
         c = self.climb
         if not self.climbing_on or c.mode == "drag" or self.drag_off is not None:
             return
-        pid = (self.bridge.active_sessions().get(sid) or {}).get("pid")
-        w = self.surfaces.window_of(pid) if pid else None
+        sess = self.bridge.active_sessions().get(sid) or {}
+        w = self.surfaces.window_of(sess.get("pid"), names=(sess.get("project"),
+                                                            sess.get("title")))
         if not w:
             return
         if c.mode in ("ledge", "edge") and c.win == w["id"]:
@@ -1372,6 +1374,7 @@ class Walkie(QWidget):
             info.setEnabled(False)
         m.addSeparator()
         lang_acts = self.add_lang_menu(m)
+        a_mic = m.addAction(t("Mikrofon testen …"))
         a_settings = m.addAction(t("Einstellungen …"))
         a_quit = m.addAction(t("Beenden"))
         act = m.exec(e.globalPos())
@@ -1405,6 +1408,8 @@ class Walkie(QWidget):
             self.set_ui_lang(lang_acts[act])
         elif act == a_settings:
             self.open_settings()
+        elif act == a_mic:
+            self.open_settings("mic")
         elif act == a_quit:
             QApplication.quit()
 
@@ -1433,6 +1438,7 @@ class Walkie(QWidget):
         menu = menu or self.tray_menu
         menu.clear()
         menu.addAction(t("Reden"), self.start_talk)
+        menu.addAction(t("Mikrofon testen …"), lambda: self.open_settings("mic"))
         menu.addAction(t("Einstellungen …"), self.open_settings)
         for a, val in self.add_lang_menu(menu).items():
             a.triggered.connect(lambda _=False, v=val: self.set_ui_lang(v))
@@ -1691,11 +1697,15 @@ class Walkie(QWidget):
             self.whisper_loading = True               # Sprach-Antworten erst jetzt eingeschaltet
             self.in_thread(self.load_whisper)
 
-    def open_settings(self):
+    def open_settings(self, page=None):
         from settings_gui import SettingsWindow
         if self.settings_win is None:
             self.settings_win = SettingsWindow(walkie=self)
         self.settings_win.show()
+        if page == "mic":
+            self.settings_win.test_mic_now()
+        elif page:
+            self.settings_win.goto(page)
         self.settings_win.raise_()
         self.settings_win.activateWindow()
 
@@ -1983,7 +1993,8 @@ class Walkie(QWidget):
                 self.mic_device = self.headset_audio.prepare(self.mic_owner, self.mic_device, HEADSET_NAME)
             elif not self.mic_device:
                 self.mic_device = headset_mic()
-            dbg(f"mikro: {self.mic_device or 'Standard'}")
+            dbg(f"mikro: {self.mic_device or 'Standard'}"
+                + ("" if self.mic_device else f" ({audio.default_input_name() or '?'})"))
             # Bluetooth-Telefonmodus: Die Verbindung braucht nach dem Umschalten und nach dem
             # Aufnahmestart ~0,8 s; ein Ton in dieser Zeit geht verloren, und das Mikro ist taub.
             # Dann piept es erst, wenn das Mikro wirklich hört (_beep_when_live).
@@ -2143,7 +2154,7 @@ class Walkie(QWidget):
 
     def stop_listening(self):
         dbg(f"stop_listening: max Pegel {getattr(self, 'max_rms', 0.0):.4f}")
-        peak = getattr(self, "max_rms", 0.0)
+        peak = self.last_peak = getattr(self, "max_rms", 0.0)
         self.max_rms = 0.0
         self.rec_limit.stop()
         self.level_timer.stop()
@@ -2196,6 +2207,9 @@ class Walkie(QWidget):
     def ack_then_finish(self, rec, mark, path, cut, owner, laps=None):
         """„Okay“ bei noch laufender Aufnahme, dann stoppen, das „Okay“ wegschneiden,
         Kopfhörer zurückschalten (im Hintergrund) und erkennen/zuordnen."""
+        # Was vor dem „Okay“ gesagt wurde, steht schon fest: schon jetzt erkennen, während das
+        # „Okay“ läuft und der Kopfhörer nachspielt (spart 2-3 s bis zur Antwort).
+        early = self.hear_early(path, mark)
         try:
             dbg("aufnahme ok – bestätige, solange das mikro noch offen ist")
             self.speak(t("Okay."), event_ts=time.time(), label="Okay-Audio")
@@ -2214,7 +2228,30 @@ class Walkie(QWidget):
                 self.in_thread(self.headset_audio.release, owner)
         if cut:
             dbg("reden: zeitlimit erreicht – aufnahme abgeschnitten")
-        self.talk_pipeline(path, cut, laps=laps)
+        self.talk_pipeline(path, cut, laps=laps, early=early)
+
+    def hear_early(self, path, mark):
+        """Erkennung des Teils bis `mark` im Hintergrund starten -> Future oder None."""
+        import concurrent.futures
+        copy = f"{path}.early.wav"
+        try:
+            audio.copy_wav(path, copy, mark)
+        except OSError as ex:
+            dbg(f"früh erkennen: {ex!r}")
+            return None
+        fut = concurrent.futures.Future()
+
+        def run():
+            started = time.monotonic()
+            try:
+                fut.set_result(self.hear(copy))
+                dbg(f"erkannt in {time.monotonic() - started:.1f} s")
+            except Exception as ex:  # noqa: BLE001 – dann eben danach normal erkennen
+                fut.set_exception(ex)
+            finally:
+                Path(copy).unlink(missing_ok=True)
+        self.in_thread(run)
+        return fut
 
     def vocab(self):
         """Wörter, die Whisper sonst gern verhört („Claude“ -> „Cloud“, „auth middleware“ ->
@@ -2616,18 +2653,37 @@ class Walkie(QWidget):
         if self.state not in ("listening", "thinking"):   # z. B. Whisper fehlt
             self.answer_done.set()
 
-    def talk_pipeline(self, wav, cut=False, heard=True, laps=None):
+    def talk_pipeline(self, wav, cut=False, heard=True, laps=None, early=None):
         """Gesprochenen Satz weiterleiten (passende Session) oder selbst beantworten.
         cut: Aufnahme lief ins Zeitlimit – das wird angesagt, damit nichts still verloren geht.
         laps: Zeitmessung ab dem Loslassen (Laps), am Ende als eine Logzeile."""
         kind = "leer"
         try:
             # fast stumm: Whisper erfindet dann gern Sätze („Okay, wir werden das Set …“)
-            text = self.hear(wav, laps) if heard else ""
+            text = None
+            if early is not None and heard:
+                try:
+                    text = early.result(timeout=120)
+                    if laps:
+                        laps.lap("whisper (früh)")
+                except Exception as ex:  # noqa: BLE001
+                    dbg(f"früh erkennen: {ex!r}")
+            if text is None:
+                text = self.hear(wav, laps) if heard else ""
             dbg(f"reden: {text!r}")
             if not text:
                 self.bus.state.emit("idle")
                 self.bus.action.emit("Cringe")
+                if getattr(self, "last_peak", 1.0) < MIC_DEAD:
+                    # praktisch digitale Stille: das Mikro liefert nichts (falsches Gerät, nach
+                    # dem Verbinden eines Kopfhörers umgeschaltet, stummgeschaltet)
+                    mic = S.get("WALKIE_MIC") or audio.default_input_name() or t("Systemstandard")
+                    dbg(f"reden: vom mikro kommt nichts an ({mic})")
+                    notify(t("Vom Mikrofon kommt nichts an: {mic}. Unter Einstellungen → "
+                             "Sprache & Modelle kannst du es testen und wechseln.", mic=mic))
+                    self.say_q.put(Speech("Vom Mikrofon kommt nichts an. Prüf bitte in den "
+                                          "Einstellungen, welches Mikrofon aktiv ist."))
+                    return
                 self.say_q.put(Speech("Hab nichts verstanden."))
                 return
             if cut:
@@ -2695,9 +2751,15 @@ class Walkie(QWidget):
                 self.open_new_session(text, agent=S.get("WALKIE_AGENT"))
                 return
             self.bus.state.emit("idle")
+            if sid:                                    # der Router hat gleich mitgeantwortet
+                self.say_q.put(sid)
+                return
             self.say_q.put(Speech("Moment, ich schaue nach."))
+            started = time.monotonic()
             answer = router.ask_self(spoken_prompt(text), RUN, WALKIE_NAME, sessions, env=clean_env(),
-                                     cwd=router.home_dir(), model=S.get("WALKIE_SELF_MODEL"))
+                                     cwd=router.home_dir(), model=S.get("WALKIE_SELF_MODEL"),
+                                     log=dbg)
+            dbg(f"selbst: {time.monotonic() - started:.1f} s, {len(answer)} Zeichen")
             self.bus.state.emit("idle")
             self.say_q.put(answer or Speech("Darauf habe ich gerade keine Antwort."))
         except Exception as ex:  # noqa: BLE001
@@ -2917,7 +2979,7 @@ class Walkie(QWidget):
                     continue
                 if len(samples) < 8000 or float(np.sqrt(np.mean(samples ** 2))) < 0.01:
                     continue                           # still: nichts zu prüfen
-                segs, _ = self.whisper.transcribe(samples, language=S.get("WALKIE_LANG") or None,
+                segs, _ = self.whisper.transcribe(samples, language=S.stt_language(),
                                                   vad_filter=True, beam_size=1, temperature=0.0,
                                                   condition_on_previous_text=False)
                 heard = " ".join(s.text for s in segs)
@@ -3289,6 +3351,15 @@ class Walkie(QWidget):
             from transcription import whisper_model
             self.whisper = whisper_model(WHISPER_MODEL, cpu_threads=os.cpu_count() or 4)
             self.whisper_retry_at = 0.0
+            try:                    # der erste Durchlauf ist ~2 s langsamer: jetzt, nicht beim Reden
+                import numpy as np
+                noise = (np.random.default_rng(0).standard_normal(16000) * 0.01).astype(np.float32)
+                list(self.whisper.transcribe(noise, language=S.stt_language(),
+                                             beam_size=1, temperature=0.0, max_new_tokens=4,
+                                             condition_on_previous_text=False,
+                                             without_timestamps=True)[0])
+            except Exception as ex:  # noqa: BLE001
+                dbg(f"Whisper aufwärmen: {ex!r}")
         except Exception as ex:
             self.whisper_retry_at = time.monotonic() + MODEL_RETRY_SECONDS
             dbg(f"Whisper ({WHISPER_MODEL}) konnte nicht geladen werden: {ex!r}. "

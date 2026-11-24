@@ -90,6 +90,14 @@ DEFAULT_VOICE = "Deutsch · Thorsten (männlich)"
 
 AGENTS = [("claude", "Claude Code"), ("codex", "Codex"), ("gemini", "Gemini CLI"),
           ("antigravity", "Antigravity CLI"), ("custom", "Eigener Befehl")]
+# Sprachen der Spracherkennung (Whisper), im Menü in ihrer eigenen Schreibweise
+STT_LANGUAGES = [("auto", "Automatisch erkennen"), ("de", "Deutsch"), ("en", "English"),
+                 ("fr", "Français"), ("es", "Español"), ("it", "Italiano"),
+                 ("pt", "Português"), ("nl", "Nederlands"), ("pl", "Polski"),
+                 ("cs", "Čeština"), ("da", "Dansk"), ("sv", "Svenska"), ("no", "Norsk"),
+                 ("fi", "Suomi"), ("tr", "Türkçe"), ("el", "Ελληνικά"), ("ru", "Русский"),
+                 ("uk", "Українська"), ("ar", "العربية"), ("hi", "हिन्दी"), ("ja", "日本語"),
+                 ("ko", "한국어"), ("zh", "中文")]
 ANSWER_MODES = [("auto", "Nach der Frage automatisch zuhören"),
                 ("key", "Nur auf Tastendruck zuhören")]
 
@@ -210,7 +218,9 @@ SCHEMA = [
             [("tiny", "tiny – sehr schnell"), ("base", "base – Standard"),
              ("small", "small – genauer"), ("medium", "medium – am genauesten, langsam")],
             restart=True),
-    Setting("WALKIE_LANG", "str", "de", "voice", "Sprache der Erkennung", "z. B. de, en."),
+    Setting("WALKIE_LANG", "choice", "de", "voice", "Sprache der Erkennung",
+            "In welcher Sprache du sprichst. Automatisch: Whisper erkennt sie selbst (etwas "
+            "langsamer, bei kurzen Sätzen unsicherer).", STT_LANGUAGES),
     Setting("WALKIE_VOICE", "choice", DEFAULT_VOICE, "voice", "Stimme",
             "Piper-Stimme fürs Vorlesen, wird bei Auswahl geladen (~60 MB).",
             [(n, n) for n in VOICES]),
@@ -373,6 +383,12 @@ def voice_for_language(code, preferred=None):
         return preferred
     return next((name for name in candidates
                  if (HERE / "voices" / (VOICES[name][0] + ".onnx")).is_file()), candidates[0])
+
+
+def stt_language():
+    """Sprache für Whisper: Code oder None (= selbst erkennen)."""
+    code = get("WALKIE_LANG")
+    return None if not code or code == "auto" else code
 
 
 def has_kitty():

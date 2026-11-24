@@ -15,6 +15,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import NamedTuple
 
+import paths
+
 CACHE_S = 300
 GIT_TIMEOUT = 2
 MAX_FILES = 4000
@@ -46,7 +48,8 @@ def _letters(text):
 def _git(cwd, *args):
     try:
         r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True,
-                           timeout=GIT_TIMEOUT, encoding="utf-8", errors="replace")
+                           timeout=GIT_TIMEOUT, encoding="utf-8", errors="replace",
+                           stdin=subprocess.DEVNULL, **paths.no_window())
     except (OSError, subprocess.SubprocessError):
         return []
     return r.stdout.splitlines() if r.returncode == 0 else []

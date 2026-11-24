@@ -136,7 +136,7 @@ Bei einer unbestätigten Übergabe im nativen Claude-Diktat zeigt der Befehl den
 | | Stand |
 |---|---|
 | **Linux – KDE Plasma** (Wayland/X11, PipeWire) | entwickelt und täglich im Einsatz |
-| **Linux – GNOME und andere** | sollte laufen; Fensterkanten nur unter X11 mit `wmctrl`, kein „Zeig mir das“ unter GNOME-Wayland |
+| **Linux – GNOME und andere** | sollte laufen; Fensterkanten nur unter X11, kein „Zeig mir das“ unter GNOME-Wayland |
 | **Windows 10/11** | Testsuite, Start/Stopp, Musik leiser und Denkmodelle (`claude`, `agy`) unter Windows 11 geprüft; Kopfhörertasten über Medientasten |
 | **WSL2 (WSLg)** | läuft; fehlende Qt-Systembibliotheken (z. B. `libxcb-icccm4`, `libxcb-keysyms1`) installiert `walkie setup` mit |
 | **macOS** | experimentell – noch nicht auf echter Hardware getestet; braucht Freigaben für Mikrofon und Bedienungshilfen |
@@ -197,7 +197,8 @@ Schleim – freie Pixel-Art (CC0), mit `tools/make_figures.py` umgebaut. Quellen
     walkie sprite import ~/Downloads/irgendein-shimeji.zip mein-shimeji
 
 Figuren ohne Kletterbilder klettern gedreht. Fensterkanten gibt es unter KDE (Wayland oder X11),
-macOS (Fensterliste des Systems, ohne zusätzliche Freigabe) und auf X11-Desktops mit `wmctrl`;
+macOS (Fensterliste des Systems, ohne zusätzliche Freigabe), Windows, WSL (WSLg und xrdp) und auf
+allen X11-Desktops;
 anderswo nutzt die Figur Boden, Bildschirmränder und Decke.
 
 ## Entwicklung
