@@ -115,15 +115,16 @@ class Surfaces:
                 self.backend = "windows"
             elif self._start_kwin():
                 self.backend = "kwin"
-            elif is_wsl() and _wsl_powershell():
-                threading.Thread(target=self._wsl_loop, daemon=True).start()
-                self.backend = "wsl"
-            elif os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY") and (
-                    _xlib_ok() or (shutil.which("wmctrl") and shutil.which("xprop"))):
+            elif _on_x11() and (_xlib_ok() or (shutil.which("wmctrl") and shutil.which("xprop"))):
+                # auch unter WSL mit eigenem X-Desktop (xrdp): dort zählen dessen Fenster
                 read = _xlib_windows if _xlib_ok() else _x11_windows
                 threading.Thread(target=self._poll_loop, args=(read, 0.7),
                                  daemon=True).start()
                 self.backend = "x11"
+            elif is_wsl() and _wsl_powershell():
+                # WSLg: die Figur steht direkt auf dem Windows-Desktop
+                threading.Thread(target=self._wsl_loop, daemon=True).start()
+                self.backend = "wsl"
         except Exception as ex:  # noqa: BLE001 – ohne Fenster geht es auch
             self.log(f"fenster: {ex!r}")
         self.log(f"fenster: {self.backend or 'keine Quelle'}")
@@ -528,6 +529,19 @@ while ($true) {
   Start-Sleep -Milliseconds 700
 }
 """
+
+
+def _on_x11():
+    """Zeichnet Qt über X11? Unter WSL ist WAYLAND_DISPLAY (WSLg) oft auch dann gesetzt, wenn
+    die Figur auf einem X-Desktop (z. B. xrdp) läuft – dann zählt, was Qt benutzt."""
+    try:
+        from PyQt6.QtGui import QGuiApplication
+        name = QGuiApplication.platformName()
+        if name:
+            return name == "xcb"
+    except Exception:  # noqa: BLE001
+        pass
+    return bool(os.environ.get("DISPLAY")) and not os.environ.get("WAYLAND_DISPLAY")
 
 
 def is_wsl():

@@ -113,3 +113,47 @@ class LanguageMenu(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowsKeyLearning(unittest.TestCase):
+    def test_learning_records_every_media_key_and_swallows_it(self):
+        import types
+
+        import hook
+        import keys
+        listeners = []
+
+        class Listener:
+            def __init__(self, win32_event_filter):
+                self.filter, self.suppressed = win32_event_filter, 0
+                listeners.append(self)
+                self.daemon = True
+
+            def start(self):
+                pass
+
+            def suppress_event(self):
+                self.suppressed += 1
+        fake = types.SimpleNamespace(keyboard=types.SimpleNamespace(Listener=Listener))
+        emitted = []
+        hook.RUN.mkdir(parents=True, exist_ok=True)
+        hook.LEARN_LOG.write_text("", encoding="utf-8")
+        hook.LEARN_FLAG.touch()
+        try:
+            with mock.patch.object(sys, "platform", "win32"), \
+                    mock.patch.dict(sys.modules, pynput=fake), \
+                    mock.patch.object(keys.threading, "Thread"), \
+                    mock.patch.dict(os.environ, WALKIE_KEYS="{}"):
+                self.assertTrue(keys.start_windows_media(emitted.append, lambda m: None))
+                lst = listeners[0]
+                data = types.SimpleNamespace(vkCode=0xB0, flags=0)       # NEXTSONG
+                lst.filter(0x0100, data)
+                lst.filter(0x0101, data)
+            self.assertEqual(lst.suppressed, 2)                         # Musik reagiert nicht
+            self.assertEqual(emitted, [])                               # nichts ausgeführt
+            keys.write_learned("NEXTSONG", "press")
+            import json
+            self.assertEqual(json.loads(hook.LEARN_LOG.read_text().splitlines()[-1])["key"],
+                             "NEXTSONG")
+        finally:
+            hook.LEARN_FLAG.unlink(missing_ok=True)

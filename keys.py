@@ -63,20 +63,41 @@ def start_windows_media(emit, log):
             state["g"] = keymap.Gestures(S.get("WALKIE_KEYS"))
         return state["g"]
 
-    def handle(key, value):
-        for k, gesture in gestures().feed(key, value, time.time()):
-            act = gestures().action(k, gesture)
+    learn = {"g": None}
+    seen = set()
+
+    def current():
+        """Im Anlern-Modus (Einstellungen → Kopfhörer → Taste anlernen) alle Gesten erkennen
+        und nur aufschreiben statt ausführen."""
+        if learning():
+            learn["g"] = learn["g"] or keymap.Gestures(learn=True)
+        else:
+            learn["g"] = None
+        return learn["g"] or gestures()
+
+    def fire(g, fired):
+        for k, gesture in fired:
+            if g is learn["g"]:
+                write_learned(k, gesture)
+                continue
+            act = g.action(k, gesture)
+            log(f"geste {k}/{gesture} -> {act}")
             if act and act != "none":
                 emit(act)
 
     def win_filter(msg, data):
         """Belegte Kopfhörertasten abfangen (sonst pausiert z. B. Spotify mit), außer es ist
-        ein Tastendruck, den wir selbst gesendet haben."""
+        ein Tastendruck, den wir selbst gesendet haben. Beim Anlernen jede Medientaste."""
         key = VK.get(data.vkCode)
         if key is None or data.flags & LLKHF_INJECTED:
             return True
-        if (S.get("WALKIE_KEYS").get(key) or {}):
-            handle(key, 0 if msg in (0x0101, 0x0105) else 1)   # WM_KEYUP/WM_SYSKEYUP
+        down = msg not in (0x0101, 0x0105)                    # WM_KEYUP/WM_SYSKEYUP
+        if down and key not in seen:
+            seen.add(key)
+            log(f"taste {key} (Windows-Medientaste)")      # zeigt: die Taste kommt an
+        g = current()
+        if g is learn["g"] or (S.get("WALKIE_KEYS").get(key) or {}):
+            fire(g, g.feed(key, 1 if down else 0, time.time()))
             listener.suppress_event()
         return True
 
@@ -87,13 +108,31 @@ def start_windows_media(emit, log):
     def poll():
         while True:
             time.sleep(0.05)
-            for k, gesture in gestures().poll(time.time()):
-                act = gestures().action(k, gesture)
-                if act and act != "none":
-                    emit(act)
+            g = current()
+            fire(g, g.poll(time.time()))
     threading.Thread(target=poll, daemon=True).start()
     log("tasten: windows-medientasten")
     return True
+
+
+def learning():
+    """Läuft gerade das Anlernen einer Kopfhörertaste? (Die GUI frischt die Datei auf.)"""
+    from hook import LEARN_FLAG
+    try:
+        return time.time() - LEARN_FLAG.stat().st_mtime < 60
+    except OSError:
+        return False
+
+
+def write_learned(key, gesture):
+    import json
+
+    from hook import LEARN_LOG
+    try:
+        with open(LEARN_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"key": key, "gesture": gesture, "ts": time.time()}) + "\n")
+    except OSError:
+        pass
 
 
 # ------------------------------------------------------------------ macOS
