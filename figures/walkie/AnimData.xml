@@ -322,6 +322,38 @@
       </Durations>
     </Anim>
     <Anim>
+      <Name>Listen</Name>
+      <Index>20</Index>
+      <FrameWidth>224</FrameWidth>
+      <FrameHeight>384</FrameHeight>
+      <Durations>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+      </Durations>
+    </Anim>
+    <Anim>
       <Name>Cringe</Name>
       <CopyOf>Hurt</CopyOf>
     </Anim>

@@ -1026,7 +1026,8 @@ class Walkie(QWidget):
     def pick_effect(self):
         """Beim Arbeiten (und selten im Leerlauf) ab und zu ein Effekt auf das ganze Bild –
         so wirken Figuren mit wenigen Bildern lebendiger."""
-        if self.climb.mode not in ("floor", "ledge"):
+        if (self.climb.mode not in ("floor", "ledge")
+                or (self.view == "listening" and self.anim.s.has("Listen"))):
             self.fx_kind = None
             return
         now = self.t
@@ -1151,7 +1152,7 @@ class Walkie(QWidget):
         elif m == "edge":
             a.play("SitEdge")
         elif self.view == "listening":
-            a.play("DeepBreath")
+            a.play("Listen" if a.s.has("Listen") else "DeepBreath")
         elif self.view == "thinking":
             a.play("Charge", side[1])
         elif self.view == "speaking":
@@ -1276,7 +1277,7 @@ class Walkie(QWidget):
             p.setBrush(RING)
             p.drawRoundedRect(QRectF(cx - 4, top, 8, 18), 4, 4)
             p.drawEllipse(QPointF(cx, top + 25), 4.5, 4.5)
-        if self.view == "listening":
+        if self.view == "listening" and self.anim.name != "Listen":
             pulse = (self.t * 1.0) % 1
             c = QColor(RING)
             c.setAlpha(int(200 * (1 - pulse)))

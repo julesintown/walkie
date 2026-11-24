@@ -1392,6 +1392,22 @@ class WalkieTest(unittest.TestCase):
         self.hook("--plugin", "prompt", session_id="A")
         self.b.state = "listening"
         self.assertEqual(self.view(), "listening")
+        self.assertEqual(self.b.anim.name, "DeepBreath")
+
+    def test_walkie_faces_forward_to_listen(self):
+        from sprite import DOWN, Animator, SpriteSet
+        b = self.b
+        b.anim = Animator(SpriteSet(self.ev.S.DEFAULT_FIGURE, scale=4))
+        b.fx_kind = "spin"
+        b.set_state("listening")
+        b.step()
+        self.assertEqual((b.anim.name, b.anim.row, b.fx_kind), ("Listen", DOWN, None))
+        for _ in range(8):
+            b.step()
+        self.assertGreater(b.anim.i, 0)
+        b.set_state("speaking")
+        b.step()
+        self.assertEqual(b.anim.name, "Nod")
 
     def test_session_end_and_ttl(self):
         self.hook("--plugin", "prompt", session_id="A")
