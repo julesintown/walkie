@@ -327,7 +327,7 @@ class WalkieTest(unittest.TestCase):
         import struct
         b, ev = self.b, self.ev
         path = TMP / "bt.wav"
-        signal = struct.pack("<8h", *[500] * 8)
+        signal = struct.pack("<8h", *[60] * 8)           # Stille vor dem Piep: Grundrauschen
         path.write_bytes(b"\0" * 44 + b"\0\0" * 100 + signal + struct.pack("<50h", *[900] * 50))
 
         class Rec:
@@ -338,7 +338,7 @@ class WalkieTest(unittest.TestCase):
         b.rec_proc, b.live_wait = rec, True
         beeps = []
         with patch.object(ev, "beep", lambda *a, **k: beeps.append(a)), \
-                patch.object(type(b), "BEEP_TAIL", 0):
+                patch.object(type(b), "BEEP_TAIL", 0), patch.object(type(b), "NOISE_SAMPLES", 8):
             b._beep_when_live(rec, str(path))
         data = path.read_bytes()[44:]
         mark = rec.data_bytes()
@@ -347,6 +347,26 @@ class WalkieTest(unittest.TestCase):
         self.assertEqual(data[:mark], bytes(mark))         # Ton und Anlauf ausgeblendet
         self.assertNotEqual(data[mark:], bytes(len(data) - mark))
         self.assertEqual(b.rec_pos, 44 + mark)
+        self.assertAlmostEqual(b.noise, 60 / 32768, places=5)   # vor dem Piep gemessen, nicht danach
+        b.rec_proc = None
+
+    def test_bluetooth_noise_floor_ignores_early_speech(self):
+        """Wer schon vor dem Piep redet, macht seine Stimme nicht zum „Rauschen“."""
+        import struct
+        b, ev = self.b, self.ev
+        path = TMP / "bt2.wav"
+        path.write_bytes(b"\0" * 44 + struct.pack("<60h", *[8000] * 60))
+
+        class Rec:
+            def data_bytes(self):
+                return 80
+
+        rec = Rec()
+        b.rec_proc, b.live_wait = rec, True
+        with patch.object(ev, "beep", lambda *a, **k: None), \
+                patch.object(type(b), "BEEP_TAIL", 0), patch.object(type(b), "NOISE_SAMPLES", 8):
+            b._beep_when_live(rec, str(path))
+        self.assertEqual(b.noise, type(b).NOISE_MAX)
         b.rec_proc = None
 
     def test_talk_pipeline_logs_step_timings(self):

@@ -1921,24 +1921,43 @@ class Walkie(QWidget):
 
     LIVE_TIMEOUT = 2.0      # s: so lange höchstens auf das erste Signal warten
     BEEP_TAIL = 0.15        # s: Nachhall des Tons, wird mit ausgeblendet
+    NOISE_SAMPLES = 4000    # 0,25 s Stille vor dem Piep fürs Grundrauschen
+    NOISE_MAX = 0.005       # mehr ist kein Rauschen mehr (zu früh losgeredet)
 
     def _beep_when_live(self, rec, path):
         """Warten, bis das Mikro echtes Signal liefert, dann den Startton spielen und den Ton
         aus der Aufnahme wieder ausblenden (Nullen), damit Whisper und die Pegelprüfung ihn
         nicht hören. Die Pegelprüfung wartet so lange (live_wait)."""
         import numpy as np
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < self.LIVE_TIMEOUT and self.rec_proc is rec:
+
+        def samples():
             try:
                 with open(path, "rb") as f:
                     f.seek(44)
-                    a = np.frombuffer(f.read(), dtype=np.int16)
-                if len(a) and int(np.abs(a).max()) > 3:
-                    break
+                    return np.frombuffer(f.read(), dtype=np.int16)
             except (OSError, ValueError):
-                pass
+                return np.zeros(0, dtype=np.int16)
+        t0 = time.monotonic()
+        first = None
+        while time.monotonic() - t0 < self.LIVE_TIMEOUT and self.rec_proc is rec:
+            a = samples()
+            live = np.flatnonzero(np.abs(a) > 3) if len(a) else []
+            if len(live):
+                first = int(live[0])
+                break
             time.sleep(0.02)
         dbg(f"mikro hört nach {time.monotonic() - t0:.2f}s")
+        # Grundrauschen VOR dem Piep messen, solange der Nutzer noch wartet. Danach redet er
+        # sofort los – aus dem ersten Stück danach wäre „Rauschen“ seine Stimme, und normales
+        # Sprechen gälte als Pause (Aufnahme bricht mitten im Satz ab).
+        noise = None
+        if first is not None:
+            while self.rec_proc is rec and len(samples()) - first < self.NOISE_SAMPLES \
+                    and time.monotonic() - t0 < self.LIVE_TIMEOUT + 0.5:
+                time.sleep(0.02)
+            quiet = samples()[first:first + self.NOISE_SAMPLES].astype(np.float32) / 32768
+            if len(quiet):
+                noise = min(float(np.sqrt(np.mean(quiet * quiet))), self.NOISE_MAX)
         try:
             if self.rec_proc is rec:
                 beep(up=True, wait=True, gain=BT_BEEP_GAIN)
@@ -1950,7 +1969,7 @@ class Walkie(QWidget):
                     f.write(bytes(mark))
                 self.rec_pos = 44 + mark
                 self.rec_start = self.last_voice = time.time()
-                self.max_rms, self.answer_voice, self.noise = 0.0, 0.0, None
+                self.max_rms, self.answer_voice, self.noise = 0.0, 0.0, noise
         except OSError as ex:
             dbg(f"startton: {ex!r}")
         finally:
