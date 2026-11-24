@@ -105,7 +105,7 @@ def table(code):
     return _tables[code]
 
 
-def t(text, **kw):
+def t(text, /, **kw):
     """Text in der Oberflächensprache; benannte Platzhalter per format()."""
     code = lang()
     if code != "de" and text:
@@ -124,7 +124,7 @@ def render(value):
 
 class Speech(str):
     """A queued announcement retains its template and arguments until playback."""
-    def __new__(cls, template, **values):
+    def __new__(cls, template, /, **values):
         def resolve():
             return t(template, **{k: render(v) for k, v in values.items()})
         obj = super().__new__(cls, resolve())

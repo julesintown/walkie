@@ -215,7 +215,8 @@ SCHEMA = [
             "Piper-Stimme fürs Vorlesen, wird bei Auswahl geladen (~60 MB).",
             [(n, n) for n in VOICES]),
     Setting("WALKIE_READ_ANSWERS", "bool", True, "voice", "Antworten vorlesen",
-            "Antworten auf gesprochene Nachrichten im eigenen Terminal."),
+            "Jede Antwort deiner Sessions vorlesen – auch auf getippte Nachrichten. Aus: nur "
+            "kurze Ansagen, wenn etwas fertig ist."),
     Setting("WALKIE_SILENCE", "float", 7.0, "voice", "Stille bis Absenden (Sekunden)",
             "Beim Gespräch per Doppelklick.", min=2, max=30),
     Setting("WALKIE_SELF_MODEL", "choice", "sonnet", "voice", "Modell, wenn der Walkie selbst antwortet",

@@ -2234,7 +2234,12 @@ class Walkie(QWidget):
             self.in_thread(self.on_reply_request, ev, sid, who)
         elif kind == "stop" and not own and ev.get("question") and S.get("WALKIE_VOICE_REPLY"):
             self.in_thread(self.on_reply_request, ev, sid, who)   # Frage am Ende (Mod)
-        elif kind == "stop" and not own and ev.get("voice"):
+        elif kind == "stop" and not own and (ev.get("voice") or self.voice_on) \
+                and (ev.get("text") or "").strip():
+            # Walkie an = jede Antwort hören, auch auf getippte Nachrichten. Wie lang, entscheidet
+            # das Modell (summarize); WALKIE_READ_ANSWERS aus = nur noch kurze Fertig-Ansagen.
+            if hidden and self.notify_on and worked > S.get("WALKIE_ANNOUNCE_AFTER"):
+                notify(t("{label} ist fertig ✨", label=label))
             self.in_thread(self.speak_answer, sid, who, ev.get("text") or "")
         elif kind == "stop" and hidden and not (own and self.expect_voice):
             if not own and self.notify_on and worked > S.get("WALKIE_ANNOUNCE_AFTER"):
@@ -2778,7 +2783,7 @@ class Walkie(QWidget):
                 pass
 
     def speak_answer(self, sid, who, text):
-        """Antwort einer Session auf eine gesprochene Frage vorlesen (lang: zusammengefasst)."""
+        """Antwort einer Session vorlesen – gesprochen oder getippt (lang: zusammengefasst)."""
         if not (self.voice_on and text.strip()):
             return
         self.say_q.put(self.named(sid, who) + self.summarize(text, request=self.request_of(sid)),

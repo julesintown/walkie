@@ -205,7 +205,24 @@ class WalkieTest(unittest.TestCase):
         self.assertEqual(self.said(), ["Claude braucht dich. Rückfrage für dich. "
                                        "Welche Datenbank?"])
 
+    def test_typed_answers_are_read_when_reading_is_on(self):
+        """Walkie an = jede Antwort hören, auch auf getippte Nachrichten (Schalter: Antworten
+        vorlesen)."""
+        b = self.b
+        spoken = []
+        b.voice_on = True
+        b.in_thread = lambda fn, *a: spoken.append(a) if fn == b.speak_answer else None
+        self.hook("--plugin", "prompt", session_id="T", cwd="/p/api")
+        self.view()
+        self.hook("--plugin", "stop", session_id="T", cwd="/p/api",
+                  last_assistant_message="Erledigt, alles grün.")
+        self.view()
+        self.assertEqual(spoken, [("T", "api", "Erledigt, alles grün.")])
+
     def test_announces_done_only_after_real_work(self):
+        """Antworten vorlesen aus: nur kurze Fertig-Ansagen nach echter Arbeit."""
+        self.b.voice_on = False
+        self.addCleanup(setattr, self.b, "voice_on", True)
         self.b.announce_on = True
         done = []
         self.b.in_thread = lambda fn, *a: done.append(a) if fn == self.b.announce_done else None
@@ -323,8 +340,10 @@ class WalkieTest(unittest.TestCase):
             b.talk_pipeline(str(TMP / "nichts.wav"))
         self.assertIn("Was läuft so?", prompts[0])
         self.assertIn("Die Tests sind durch.", prompts[0])
-        said = [b.say_q.get_nowait(), b.say_q.get_nowait()]
-        self.assertEqual(said[-1], "Dashboard ist fertig.")
+        said = []
+        while not b.say_q.empty():
+            said.append(b.say_q.get_nowait())
+        self.assertIn("Dashboard ist fertig.", said)
         b.bridge.events.queue.clear()
 
     def test_overview_without_model_is_a_short_fallback(self):

@@ -99,3 +99,11 @@ class I18nTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlaceholderNamesTest(unittest.TestCase):
+    def test_any_placeholder_name_works(self):
+        """t("… {text} …", text=…) warf TypeError (Mikrofontest im Setup unter Windows)."""
+        self.assertIn("hallo", i18n.t("Erkannt: „{text}“  (Pegel {peak}).", text="hallo", peak="1"))
+        self.assertIn("b", i18n.Speech("{template} {text}", template="a", text="b"))
+
