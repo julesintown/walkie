@@ -203,7 +203,10 @@ TONES = {
 }
 
 
-def beep(up=True, wait=False):
+BT_BEEP_GAIN = 0.12      # Telefonmodus: eigene, meist volle Lautstärke – 0.35 wäre dort grell
+
+
+def beep(up=True, wait=False, gain=0.35):
     """Signalton (siehe TONES): up=True/False, "click" oder "busy"."""
     import numpy as np
     rate = 22050
@@ -212,7 +215,7 @@ def beep(up=True, wait=False):
     for f in tones:
         t = np.arange(int(rate * dur)) / rate
         env = np.minimum(1, np.minimum(t, t[::-1]) / 0.01)      # weich ein-/ausblenden
-        parts.append(np.sin(2 * np.pi * f * t) * env * 0.35)
+        parts.append(np.sin(2 * np.pi * f * t) * env * gain)
     data = (np.concatenate(parts) * 32767).astype(np.int16).tobytes()
     try:
         audio.play_pcm(data, rate, wait=wait)
@@ -429,6 +432,43 @@ class Bus(QObject):
 
 
 LOG = RUN / "walkie.log"
+
+
+RECENT = RUN / "recent"
+KEEP_RECORDINGS = 5
+
+
+def keep_recording(wav):
+    """Die letzten KEEP_RECORDINGS Aufnahmen beim Reden aufheben (nur lokal, RUN/recent), damit
+    sich „hat mich nicht verstanden“ nachprüfen lässt. Ältere werden gelöscht."""
+    try:
+        RECENT.mkdir(parents=True, exist_ok=True)
+        shutil.move(wav, RECENT / time.strftime("%Y%m%d-%H%M%S.wav"))
+        for old in sorted(RECENT.glob("*.wav"))[:-KEEP_RECORDINGS]:
+            old.unlink(missing_ok=True)
+    except (OSError, shutil.Error):
+        try:
+            os.unlink(wav)
+        except OSError:
+            pass
+
+
+class Laps:
+    """Dauer jedes Schritts einer Äußerung (Loslassen -> zugestellt) als eine Logzeile:
+    „zeiten: stopp 0.0s · vokabel 12.3s · whisper 4.1s · router 6.0s · session 0.1s · gesamt 22.5s“."""
+
+    def __init__(self):
+        self.t0 = self.last = time.monotonic()
+        self.parts = []
+
+    def lap(self, name):
+        now = time.monotonic()
+        self.parts.append((name, now - self.last))
+        self.last = now
+
+    def line(self):
+        total = time.monotonic() - self.t0
+        return "zeiten: " + " · ".join(f"{n} {d:.1f}s" for n, d in self.parts) + f" · gesamt {total:.1f}s"
 
 
 def dbg(msg):
@@ -790,6 +830,7 @@ class Walkie(QWidget):
         self.state = "idle"
         self.t = 0.0
         self.dir = 1
+        self.turn_from = 0                   # ≠ 0: dreht sich gerade (Turn-Animation) aus dieser Richtung
         self.walking = False
         self.target_x = None
         self.head_y = 30
@@ -867,6 +908,8 @@ class Walkie(QWidget):
             dbg(f"Brücke konnte nicht starten: {ex!r}")
             self.cleanup()
             raise
+        stt, why = S.stt_in_use()
+        dbg(f"spracherkennung beim reden: {stt}" + (f" ({why})" if why else ""))
 
     # ---------------- Bewegung & Animation ----------------
     def step(self):
@@ -889,9 +932,10 @@ class Walkie(QWidget):
                 if self.climb_to:                    # an der Kante angekommen: hoch!
                     self.start_climb(self.climb_to)
             else:
-                self.dir = 1 if dx > 0 else -1
-                self.walking = True
-                self.move(self.x() + self.dir * WALK_SPEED, self.y())
+                self.turn_to(1 if dx > 0 else -1)
+                if not self.turn_from:               # erst umdrehen, dann loslaufen
+                    self.walking = True
+                    self.move(self.x() + self.dir * WALK_SPEED, self.y())
         self.update_anim()
         self.update()
 
@@ -999,7 +1043,7 @@ class Walkie(QWidget):
         else:
             return
         if kind == "turn":
-            self.dir = -self.dir
+            self.turn_to(-self.dir)
             return
         self.fx_kind, self.fx_t0 = kind, now
         self.fx_dur = {"shake": 0.6, "spin": 0.7, "bounce": 0.45}[kind]
@@ -1073,9 +1117,22 @@ class Walkie(QWidget):
         if c.mode == "floor":                      # gelandet: ab hier läuft wieder der Boden
             self.cx_px, self.ground_px = S_ / 2, S_ - 12
 
+    def turn_to(self, dirn):
+        """Blickrichtung wechseln. Am Boden im Leerlauf mit Turn-Animation (dreht sich
+        sichtbar um), sonst wie bisher sofort gespiegelt."""
+        if dirn == self.dir:
+            return
+        if (self.anim.s.has("Turn") and self.view == "idle" and self.climb.mode == "floor"
+                and self.drag_off is None and not self.turn_from):
+            self.turn_from = self.dir
+        self.dir = dirn
+
     def update_anim(self):
         a = self.anim
         side = (RIGHT, DOWN_RIGHT) if self.dir > 0 else (LEFT, DOWN_LEFT)
+        if self.turn_from and (self.view != "idle" or self.climb.mode != "floor"
+                               or self.dragged or self.sleeping):
+            self.turn_from = 0                      # unterbrochen: sofort in neuer Richtung weiter
         if self.view != "idle" or self.walking or self.drag_off is not None:
             self.wake()
         elif not self.sleeping and time.time() - self.last_activity > SLEEP_AFTER:
@@ -1103,6 +1160,12 @@ class Walkie(QWidget):
             a.play("Hop" if a.s.has("Hop") else "LookUp", side[1])
         elif self.view == "error":
             a.play("Hurt" if a.s.has("Hurt") else "Idle", side[1])
+        elif self.turn_from:
+            if a.name == "Turn" and a.done:        # Drehung fertig -> neue Richtung
+                self.turn_from = 0
+                a.play("Idle", side[1])
+            else:                                   # Bilder drehen von der alten Seite weg
+                a.play("Turn", RIGHT if self.turn_from > 0 else LEFT, once=True)
         elif self.walking:
             a.play("Walk", side[0])
         elif self.sleeping:
@@ -1245,6 +1308,9 @@ class Walkie(QWidget):
                 self.cx_px, self.ground_px = self.SIZE / 2, self.SIZE - 12
             self.dragged = True
             self.target_x = None
+            dx = new.x() - self.x()
+            if abs(dx) >= 3:                         # beim Tragen in Zugrichtung schauen
+                self.turn_to(1 if dx > 0 else -1)
             self.move(new)
 
     def mouseReleaseEvent(self, e):
@@ -1844,10 +1910,51 @@ class Walkie(QWidget):
         self.max_rms, self.answer_voice = 0.0, 0.0
         self.last_voice, self.noise = self.rec_start, None
         self.level_timer.start(250)
+        self.live_wait = bool(getattr(self, "beep_live", False))
+        self.beep_live = False
+        if self.live_wait:
+            self.in_thread(self._beep_when_live, rec, self.rec_file)
         if STT_MODE == "claude" and not answer:
             from concurrent.futures import Future
             self.native_started = Future()
             self.in_thread(self.cc_start, self.native_started)
+
+    LIVE_TIMEOUT = 2.0      # s: so lange höchstens auf das erste Signal warten
+    BEEP_TAIL = 0.15        # s: Nachhall des Tons, wird mit ausgeblendet
+
+    def _beep_when_live(self, rec, path):
+        """Warten, bis das Mikro echtes Signal liefert, dann den Startton spielen und den Ton
+        aus der Aufnahme wieder ausblenden (Nullen), damit Whisper und die Pegelprüfung ihn
+        nicht hören. Die Pegelprüfung wartet so lange (live_wait)."""
+        import numpy as np
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < self.LIVE_TIMEOUT and self.rec_proc is rec:
+            try:
+                with open(path, "rb") as f:
+                    f.seek(44)
+                    a = np.frombuffer(f.read(), dtype=np.int16)
+                if len(a) and int(np.abs(a).max()) > 3:
+                    break
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.02)
+        dbg(f"mikro hört nach {time.monotonic() - t0:.2f}s")
+        try:
+            if self.rec_proc is rec:
+                beep(up=True, wait=True, gain=BT_BEEP_GAIN)
+                time.sleep(self.BEEP_TAIL)
+            if self.rec_proc is rec:
+                mark = rec.data_bytes() // 2 * 2
+                with open(path, "r+b") as f:
+                    f.seek(44)
+                    f.write(bytes(mark))
+                self.rec_pos = 44 + mark
+                self.rec_start = self.last_voice = time.time()
+                self.max_rms, self.answer_voice, self.noise = 0.0, 0.0, None
+        except OSError as ex:
+            dbg(f"startton: {ex!r}")
+        finally:
+            self.live_wait = False
 
     def _prepare_mic(self, silence, answer):
         self.mic_device = S.get("WALKIE_MIC") or None
@@ -1857,7 +1964,12 @@ class Walkie(QWidget):
             elif not self.mic_device:
                 self.mic_device = headset_mic()
             dbg(f"mikro: {self.mic_device or 'Standard'}")
-            beep(up=True, wait=True)               # erst Ton, dann Aufnahme (Ton nicht mit drauf)
+            # Bluetooth-Telefonmodus: Die Verbindung braucht nach dem Umschalten und nach dem
+            # Aufnahmestart ~0,8 s; ein Ton in dieser Zeit geht verloren, und das Mikro ist taub.
+            # Dann piept es erst, wenn das Mikro wirklich hört (_beep_when_live).
+            self.beep_live = str(self.mic_device or "").startswith("bluez_input")
+            if not self.beep_live:
+                beep(up=True, wait=True)           # erst Ton, dann Aufnahme (Ton nicht mit drauf)
         except Exception as ex:  # noqa: BLE001
             dbg(f"mikro: {ex}")
         if not self.device_stop.is_set():
@@ -1948,6 +2060,8 @@ class Walkie(QWidget):
         if self.rec_proc is not None and not self.rec_proc.alive():
             self.mic_lost()
             return
+        if getattr(self, "live_wait", False):
+            return                                  # Bluetooth: Startton kommt erst noch
         try:
             with open(self.rec_file, "rb") as f:
                 f.seek(self.rec_pos)
@@ -2016,6 +2130,7 @@ class Walkie(QWidget):
         if not self.rec_proc:
             return
         heard = (getattr(self, "answer_voice", 0) >= self.rec_start or peak >= QUIET_PEAK)
+        laps = Laps()
         if self.answer_req == TALK and self.piper is not None and heard:
             # Gesprochen: „Okay“ sagen, SOLANGE die Aufnahme noch läuft – nur dann ist die
             # Telefonverbindung des Kopfhörers sicher offen (danach baut er sie ab, und ein kurzes
@@ -2025,10 +2140,11 @@ class Walkie(QWidget):
             cut = time.time() - self.rec_start >= TALK_MAX - 0.5
             self.set_state("thinking")
             owner, self.mic_owner = self.mic_owner, None
-            self.in_thread(self.ack_then_finish, rec, rec.data_bytes(), self.rec_file, cut, owner)
+            self.in_thread(self.ack_then_finish, rec, rec.data_bytes(), self.rec_file, cut, owner, laps)
             return
         self.rec_proc.stop()
         self.rec_proc = None
+        laps.lap("stopp")
         self.in_thread(beep, False)
         self.set_state("thinking")
         if self.answer_req == TALK:
@@ -2037,7 +2153,7 @@ class Walkie(QWidget):
             if cut:
                 dbg("reden: zeitlimit erreicht – aufnahme abgeschnitten")
             self.release_mic()
-            self.in_thread(self.talk_pipeline, self.rec_file, cut, heard)
+            self.in_thread(self.talk_pipeline, self.rec_file, cut, heard, laps)
         elif self.answer_req:
             req, self.answer_req = self.answer_req, None
             self.release_mic()
@@ -2057,7 +2173,7 @@ class Walkie(QWidget):
             self.release_mic()
             self.in_thread(self.pipeline, self.rec_file, self.term_pos())
 
-    def ack_then_finish(self, rec, mark, path, cut, owner):
+    def ack_then_finish(self, rec, mark, path, cut, owner, laps=None):
         """„Okay“ bei noch laufender Aufnahme, dann stoppen, das „Okay“ wegschneiden,
         Kopfhörer zurückschalten (im Hintergrund) und erkennen/zuordnen."""
         try:
@@ -2072,11 +2188,13 @@ class Walkie(QWidget):
             self.device_stop.wait(OKAY_TAIL)
             rec.stop()
             audio.truncate_wav(path, mark)
+            if laps:
+                laps.lap("okay+stopp")
             if owner is not None and LINUX:
                 self.in_thread(self.headset_audio.release, owner)
         if cut:
             dbg("reden: zeitlimit erreicht – aufnahme abgeschnitten")
-        self.talk_pipeline(path, cut)
+        self.talk_pipeline(path, cut, laps=laps)
 
     def vocab(self):
         """Wörter, die Whisper sonst gern verhört („Claude“ -> „Cloud“, „auth middleware“ ->
@@ -2095,11 +2213,19 @@ class Walkie(QWidget):
             found = []
         return vocab.hint(base, found), found
 
-    def hear(self, wav):
-        """Transkribieren mit Kontextvokabular und Bezeichner-Korrektur."""
+    def hear(self, wav, laps=None):
+        """Transkribieren, dann Bezeichner-Korrektur mit dem Kontextvokabular. Whisper bekommt
+        die Wörter NICHT als Hinweis: Damit brach es ohne Neuversuch nach wenigen Wörtern ab
+        („testen mit dem Fiepen.“ statt des ganzen Satzes) und erfand bei schwachem Signal
+        Projektwörter („i18n.“). Gemessen an echten Aufnahmen vom 24.11.: ohne Hinweis gleich gut
+        oder besser und schneller."""
         import vocab
-        words, found = self.vocab()
-        text = transcribe(self.whisper, wav, words)
+        _words, found = self.vocab()
+        if laps:
+            laps.lap("vokabel")
+        text = transcribe(self.whisper, wav)
+        if laps:
+            laps.lap("whisper")
         fixed = vocab.correct(text, found)
         if fixed != text:
             dbg(f"vokabular: {text!r} -> {fixed!r}")
@@ -2470,12 +2596,14 @@ class Walkie(QWidget):
         if self.state not in ("listening", "thinking"):   # z. B. Whisper fehlt
             self.answer_done.set()
 
-    def talk_pipeline(self, wav, cut=False, heard=True):
+    def talk_pipeline(self, wav, cut=False, heard=True, laps=None):
         """Gesprochenen Satz weiterleiten (passende Session) oder selbst beantworten.
-        cut: Aufnahme lief ins Zeitlimit – das wird angesagt, damit nichts still verloren geht."""
+        cut: Aufnahme lief ins Zeitlimit – das wird angesagt, damit nichts still verloren geht.
+        laps: Zeitmessung ab dem Loslassen (Laps), am Ende als eine Logzeile."""
+        kind = "leer"
         try:
             # fast stumm: Whisper erfindet dann gern Sätze („Okay, wir werden das Set …“)
-            text = self.hear(wav) if heard else ""
+            text = self.hear(wav, laps) if heard else ""
             dbg(f"reden: {text!r}")
             if not text:
                 self.bus.state.emit("idle")
@@ -2498,6 +2626,8 @@ class Walkie(QWidget):
                 last=getattr(self, "voice_target", None), direct=self.direct,
                 agents=(agent_label(S.get("WALKIE_AGENT")), agent_label(S.get("WALKIE_AGENT_2"))),
                 history=bool(self.timeline.all()))
+            if laps:
+                laps.lap("router")
             dbg(f"router: {kind} {sid or ''}")
             if kind == "overview":                     # wie steht es? – das Modell antwortet
                 self.bus.state.emit("idle")
@@ -2555,10 +2685,10 @@ class Walkie(QWidget):
             self.bus.state.emit("idle")
             self.say_q.put(Speech("Da ist etwas schiefgegangen."))
         finally:
-            try:
-                os.unlink(wav)
-            except OSError:
-                pass
+            if laps:
+                laps.lap(kind)
+                dbg(laps.line())
+            keep_recording(wav)
 
     def ask_which_session(self, text, sids, sessions):
         """Mehrere Sessions kommen infrage: „Meinst du A oder B?“ – die Antwort wählt.
@@ -2768,7 +2898,7 @@ class Walkie(QWidget):
                 if len(samples) < 8000 or float(np.sqrt(np.mean(samples ** 2))) < 0.01:
                     continue                           # still: nichts zu prüfen
                 segs, _ = self.whisper.transcribe(samples, language=S.get("WALKIE_LANG") or None,
-                                                  vad_filter=True, beam_size=1,
+                                                  vad_filter=True, beam_size=1, temperature=0.0,
                                                   condition_on_previous_text=False)
                 heard = " ".join(s.text for s in segs)
                 if barge.decide(heard, spoken) == "stop":

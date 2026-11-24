@@ -40,6 +40,26 @@ class Pulse(Backend):
     """PipeWire/PulseAudio über pactl: Lautstärke je Wiedergabe-Stream."""
     def __init__(self, own_pid):
         self.own = str(own_pid)
+        self.pending = {}                      # App -> (alt, gedrosselt): Stream endete gedrosselt
+
+    @staticmethod
+    def _parent(pid):
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+                return f.read().rsplit(")", 1)[1].split()[1]   # Feld 4 = ppid; Name kann ")" enthalten
+        except (OSError, IndexError):
+            return None
+
+    def _ours(self, pid):
+        """Eigene Wiedergabe – auch über Kindprozesse (z. B. pacat/aplay). Würde die mitgedrosselt,
+        merkt sich PipeWire die 30 % und die Stimme wird mit jedem Satz leiser."""
+        for _ in range(8):
+            if not pid or pid in ("0", "1"):
+                return False
+            if pid == self.own:
+                return True
+            pid = self._parent(pid)
+        return False
 
     @staticmethod
     def _pactl(*args):
@@ -54,28 +74,57 @@ class Pulse(Backend):
         except ValueError:
             return []
 
+    @staticmethod
+    def _app(props):
+        return (props.get("application.name"), props.get("application.process.binary"))
+
+    @staticmethod
+    def _vols(s):
+        return [int(v.get("value", 0)) for v in (s.get("volume") or {}).values()]
+
+    @staticmethod
+    def _close(now, ducked):
+        return len(now) == len(ducked) and all(abs(a - b) <= 700 for a, b in zip(now, ducked))
+
     def duck(self, factor):
         saved = {}
         for s in self.streams():
             props = s.get("properties") or {}
-            if str(props.get("application.process.id", "")) == self.own or s.get("corked"):
+            if (str(props.get("walkie.own", "")).lower() == "true"     # eigene pw-play/pacat
+                    or self._ours(str(props.get("application.process.id", "")))
+                    or s.get("corked")):
                 continue
-            vols = [int(v.get("value", 0)) for v in (s.get("volume") or {}).values()]
+            vols = self._vols(s)
             if not vols or max(vols) == 0:
                 continue
+            app = self._app(props)
+            if app in self.pending and self._close(vols, self.pending[app][1]):
+                vols = self.pending.pop(app)[0]   # startet noch gedrosselt (s. restore): echte Höhe
             new = [max(0, int(v * factor)) for v in vols]
             if self._pactl("set-sink-input-volume", str(s["index"]), *map(str, new)).returncode == 0:
-                saved[s["index"]] = (vols, new)
+                saved[s["index"]] = (vols, new, app)
         return saved
 
     def restore(self, saved):
-        current = {s["index"]: [int(v.get("value", 0)) for v in (s.get("volume") or {}).values()]
-                   for s in self.streams()}
-        for idx, (old, ducked) in (saved or {}).items():
+        """Zurückdrehen. Endet ein Stream, solange er gedrosselt ist (Liedwechsel, neues Video),
+        merkt sich PipeWire die gedrosselte Lautstärke für diese App und ihr nächster Stream
+        startet leise. Den drehen wir mit zurück – sofort, wenn er schon läuft, sonst beim
+        nächsten Mal, wenn er auftaucht."""
+        streams = self.streams()
+        current = {s["index"]: self._vols(s) for s in streams}
+        for idx, (old, ducked, app) in (saved or {}).items():
             now = current.get(idx)
-            if now is None or any(abs(a - b) > 700 for a, b in zip(now, ducked)):
-                continue                       # Stream weg oder vom Nutzer verstellt
-            self._pactl("set-sink-input-volume", str(idx), *map(str, old))
+            if now is not None:
+                if self._close(now, ducked):   # sonst vom Nutzer verstellt: so lassen
+                    self._pactl("set-sink-input-volume", str(idx), *map(str, old))
+                continue
+            successors = [s["index"] for s in streams if s["index"] not in saved
+                          and self._app(s.get("properties") or {}) == app
+                          and self._close(current[s["index"]], ducked)]
+            for i in successors:
+                self._pactl("set-sink-input-volume", str(i), *map(str, old))
+            if not successors:
+                self.pending[app] = (old, ducked)
 
 
 class WindowsSessions(Backend):
@@ -90,8 +139,15 @@ class WindowsSessions(Backend):
     def _sessions(self):
         for s in self.utils.GetAllSessions():
             pid = getattr(s, "ProcessId", None) or (s.Process.pid if s.Process else None)
-            if pid and pid != self.own:
+            if pid and pid != self.own and not self._child(s):
                 yield pid, s.SimpleAudioVolume
+
+    def _child(self, s):
+        """Eigener Kindprozess (Player-Programm) zählt als eigene Wiedergabe."""
+        try:
+            return bool(s.Process) and s.Process.ppid() == self.own
+        except Exception:  # noqa: BLE001 – Prozess schon weg / kein Zugriff
+            return False
 
     def duck(self, factor):
         saved = {}

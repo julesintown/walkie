@@ -124,5 +124,6 @@
  "installiert": "installed",
  "nicht gefunden": "not found",
  "{name} einrichten": "Set up {name}",
- "Los geht's": "Let's go"
+ "Los geht's": "Let's go",
+ "Gerade erkennt Whisper (lokal). {why}": "Whisper (local) is recognizing right now. {why}"
 }

@@ -450,6 +450,7 @@ class SettingsWindow(QWidget):
 
     def update_deps(self):
         """Abhängige Einstellungen ausgrauen."""
+        self.update_stt_note()
         def enable(keys, on):
             for k in keys:
                 if k in self.rows:
@@ -963,6 +964,11 @@ class SettingsWindow(QWidget):
         c = self.card(pg, t("Spracherkennung"))
         for k in ("WALKIE_STT", "WALKIE_WHISPER", "WALKIE_LANG", "WALKIE_SILENCE"):
             self.setting_row(c, k)
+            if k == "WALKIE_STT":
+                self.stt_note = label("", "muted")
+                self.stt_note.setWordWrap(True)
+                c.lay.addWidget(self.stt_note)
+                self.update_stt_note()
         c = self.card(pg, t("Stimme"))
         demo = QPushButton(t("Hörprobe"))
         demo.clicked.connect(self.voice_demo)
@@ -976,6 +982,16 @@ class SettingsWindow(QWidget):
         self.setting_row(c, "WALKIE_AGENT_MODEL")
         pg.lay.addStretch(1)
         return pg
+
+    def update_stt_note(self):
+        """Ehrlich zeigen, was beim Reden erkennt – die Auswahl allein sagt das nicht."""
+        note = getattr(self, "stt_note", None)
+        if note is None:
+            return
+        mode, why = S.stt_in_use()
+        if why:
+            note.setText(t("Gerade erkennt Whisper (lokal). {why}", why=t(why)))
+        note.setVisible(bool(why))
 
     def fill_mics(self):
         box = self.mic_box

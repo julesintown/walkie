@@ -223,14 +223,27 @@ class Recorder:
             return time.time() - self.last_data < stale
         return False
 
+    CLOSE_TIMEOUT = 2.0
+
     def stop(self):
         if self.dev is not None:
-            try:
-                self.dev.stop()
-                self.dev.close()
-            except Exception:  # noqa: BLE001
-                pass
-            self.dev = None
+            dev, self.dev = self.dev, None
+
+            def close():
+                try:
+                    dev.stop()
+                    dev.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            # Verschwindet ein Gerät mitten in der Aufnahme (Bluetooth getrennt), kann
+            # miniaudios close() für immer hängen. Nie den Aufrufer (GUI-Thread) mitreißen:
+            # in einem eigenen Thread schließen und notfalls zurücklassen.
+            closer = threading.Thread(target=close, name="mic-close", daemon=True)
+            closer.start()
+            closer.join(self.CLOSE_TIMEOUT)
+            if closer.is_alive():
+                self.error = "Mikrofon ließ sich nicht schließen"
+                self.stuck = closer
             self._close_file(fix=True)
         if self.proc is not None:
             try:
@@ -305,10 +318,10 @@ class Player:
             # An unbound stream could move to the speakers during a profile change.
             if target and shutil.which("pw-play"):
                 cmd = ["pw-play", "--target", target, "--properties",
-                       '{ node.dont-fallback = true node.dont-reconnect = true }',
+                       "{ node.dont-fallback = true node.dont-reconnect = true " + OWN_PW + " }",
                        "--raw", "--rate", str(rate), "--channels", "1", "--format", "s16", "-"]
             elif target and shutil.which("pacat"):
-                cmd = ["pacat", "--playback", "--device", target,
+                cmd = ["pacat", "--playback", "--device", target, OWN_PACAT,
                        f"--rate={rate}", "--channels=1", "--format=s16le"]
             else:
                 return
@@ -458,12 +471,24 @@ def record_cmd(path, device=None):
     return None
 
 
+# Eigene Wiedergabe über pw-play/pacat: als Walkie markieren (ducking.py lässt sie dann laut;
+# pw-play meldet keine Prozess-ID) und bei pw-play keine gespeicherte Lautstärke übernehmen –
+# WirePlumber teilt die sich mit allen Programmen der Rolle "Music", ein einmal leise
+# gespeicherter Wert machte die Stimme sonst dauerhaft leise. (Bei pacat würde
+# state.restore-props=false den Stream stumm starten, daher dort nur die Markierung.)
+OWN_MARK = "walkie.own"
+OWN_PW = f"state.restore-props = false application.name = Walkie {OWN_MARK} = true"
+OWN_PACAT = f"--property={OWN_MARK}=true"
+
+
 def play_cmd(rate):
     """Spielt rohes s16-mono-Audio von stdin."""
     if shutil.which("pw-play"):
-        return ["pw-play", "--raw", "--rate", str(rate), "--channels", "1", "--format", "s16", "-"]
+        return ["pw-play", "--properties", "{ " + OWN_PW + " }", "--raw", "--rate", str(rate),
+                "--channels", "1", "--format", "s16", "-"]
     if shutil.which("pacat"):
-        return ["pacat", "--playback", f"--rate={rate}", "--channels=1", "--format=s16le"]
+        return ["pacat", "--playback", OWN_PACAT, f"--rate={rate}", "--channels=1",
+                "--format=s16le"]
     if shutil.which("aplay"):
         return ["aplay", "-q", "-r", str(rate), "-c", "1", "-f", "S16_LE", "-t", "raw", "-"]
     if shutil.which("play"):

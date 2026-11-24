@@ -65,7 +65,11 @@ Targets:
   2-5 words in the user's language that tells the sessions apart by what they are about (e.g.
   "the gift ideas", "the walkie review"), never the project name alone if they share it.
 - "unclear": the speech makes no recognizable sense (speech recognition garbage, only filler
-  words, a broken fragment). Nothing is sent.
+  words, a broken fragment, a lone word or file name). Nothing is sent. A complete, understandable
+  sentence is NEVER "unclear", even when it is only a remark, an impression or feedback and asks
+  for nothing: route it by the rules below (feedback about the assistant, its speed or its
+  understanding goes to the session "in_conversation", otherwise to the session the user
+  addressed last).
 
 Rules:
 - Mentioning is not addressing. If a project name only occurs ("before I do X", "afterwards I
@@ -295,7 +299,9 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
                 out = _print_mode(brain, prompt, env, cwd, timeout)
             else:
                 out = _claude(["--model", claude_model or settings.get("WALKIE_SUMMARY_MODEL"),
-                               "--tools", "", "--no-session-persistence"], prompt, env, cwd,
+                               "--tools", "", "--no-session-persistence",
+                               # ohne Werkzeuge braucht es keine MCP-Server: ~1 s schnellerer Start
+                               "--strict-mcp-config"], prompt, env, cwd,
                               timeout)
             _brain_down.pop(brain, None)
             return out
@@ -351,7 +357,7 @@ def _codex(prompt, env, cwd, timeout, model):
         Path(out).unlink(missing_ok=True)
 
 
-NEWER_FLAGS = {"--tools": 1, "--no-session-persistence": 0}   # Flag -> Anzahl Werte
+NEWER_FLAGS = {"--tools": 1, "--no-session-persistence": 0, "--strict-mcp-config": 0}   # Flag -> Anzahl Werte
 
 
 def _without_newer_flags(args):

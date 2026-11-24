@@ -17,3 +17,7 @@ config.env
 
 # Windows-Download-Markierungen (Dateiname mit Doppelpunkt – auf Windows nicht auscheckbar)
 *:Zone.Identifier
+
+# lokale Arbeitsnotizen und Ausgangsbilder der Figur (nicht ins Repo)
+HANDOVER.md
+Russpelz/

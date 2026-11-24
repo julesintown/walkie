@@ -393,6 +393,21 @@ def talk_terminal():
     return panel() and (mode == "terminal" or (mode == "auto" and get("WALKIE_AGENT") != "claude"))
 
 
+def stt_in_use():
+    """Was beim freien Reden wirklich erkennt -> ("claude" | "whisper", Grund oder "").
+    Das Claude-Diktat tippt in ein Terminal: es braucht Claude Code als Agent, das Panel und
+    WALKIE_TALK, das ins eigene Panel-Terminal geht. Sonst erkennt still Whisper (walkie.py)."""
+    if get("WALKIE_STT") != "claude":
+        return "whisper", ""
+    if get("WALKIE_AGENT") != "claude":
+        return "whisper", "Das Claude-Diktat gibt es nur mit Claude Code als Agent."
+    if not panel():
+        return "whisper", "Das Claude-Diktat braucht das Terminal-Panel über der Figur."
+    if not talk_terminal():
+        return "whisper", "Das Claude-Diktat tippt nur ins eigene Panel-Terminal, nicht beim Weiterleiten an Sessions."
+    return "claude", ""
+
+
 def overridden(key):
     return key in os.environ
 

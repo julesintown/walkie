@@ -101,6 +101,70 @@ class PulseTest(unittest.TestCase):
             self.assertFalse([c for c in calls if c[0] == "set-sink-input-volume"],
                              "vom Nutzer verstellt: so lassen")
 
+    def test_own_child_player_stays_loud(self):
+        """Beim Bluetooth-Kopfhörer spielt pw-play (Kindprozess) die Stimme ab – nicht drosseln."""
+        streams = [
+            {"index": 7, "corked": False, "properties": {"application.process.id": "111"},
+             "volume": {"mono": {"value": 65536}}},
+            {"index": 9, "corked": False, "properties": {"application.process.id": "555"},
+             "volume": {"mono": {"value": 65536}}},
+            # pw-play meldet keine Prozess-ID, nur die Markierung aus audio.py
+            {"index": 10, "corked": False, "properties": {"walkie.own": "true"},
+             "volume": {"mono": {"value": 65536}}},
+        ]
+
+        def run(argv, **_kw):
+            out = json.dumps(streams) if "list" in argv else ""
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+        parents = {"555": "999", "111": "42", "42": "1"}
+        with patch("subprocess.run", run), \
+                patch.object(ducking.Pulse, "_parent", staticmethod(parents.get)):
+            saved = ducking.Pulse(own_pid=999).duck(0.3)
+        self.assertEqual(list(saved), [7])
+
+    def test_own_players_are_marked(self):
+        import audio
+        self.assertIn("walkie.own = true", audio.OWN_PW)
+        self.assertIn("state.restore-props = false", audio.OWN_PW)
+        self.assertEqual(audio.OWN_PACAT, "--property=walkie.own=true")
+
+    def test_stream_ending_while_ducked_gets_its_volume_back(self):
+        """Liedwechsel beim Leiserdrehen: PipeWire startet den Nachfolger mit der gemerkten,
+        gedrosselten Lautstärke. Der wird mit zurückgedreht – sofort oder beim nächsten Mal."""
+        spotify = {"application.name": "spotify", "application.process.id": "111"}
+        streams = [{"index": 7, "corked": False, "properties": spotify,
+                    "volume": {"mono": {"value": 60000}}}]
+        sets = []
+
+        def run(argv, **_kw):
+            if "set-sink-input-volume" in argv:
+                sets.append(argv[2:])
+            out = json.dumps(streams) if "list" in argv else ""
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+        with patch("subprocess.run", run):
+            p = ducking.Pulse(own_pid=999)
+            saved = p.duck(0.5)
+            streams[:] = [{"index": 8, "corked": False, "properties": spotify,
+                           "volume": {"mono": {"value": 30000}}}]       # Nachfolger, gedrosselt
+            sets.clear()
+            p.restore(saved)
+            self.assertEqual(sets, [["8", "60000"]])
+
+            # Nachfolger kommt erst nach dem Zurückdrehen: beim nächsten Mal die echte Höhe
+            streams[0]["volume"] = {"mono": {"value": 60000}}                # wie zurückgedreht
+            saved = p.duck(0.5)
+            streams[:] = []
+            p.restore(saved)
+            streams[:] = [{"index": 9, "corked": False, "properties": spotify,
+                           "volume": {"mono": {"value": 30000}}}]
+            sets.clear()
+            saved = p.duck(0.5)
+            self.assertEqual(sets, [["9", "30000"]])
+            streams[0]["volume"] = {"mono": {"value": 30000}}
+            sets.clear()
+            p.restore(saved)
+            self.assertEqual(sets, [["9", "60000"]])
+
 
 if __name__ == "__main__":
     unittest.main()

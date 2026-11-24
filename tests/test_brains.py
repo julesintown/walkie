@@ -59,7 +59,8 @@ class BrainOrder(unittest.TestCase):
                                                    stderr="error: unknown option '--tools'")
             return subprocess.CompletedProcess(argv, 0, stdout="pong", stderr="")
         with patch("subprocess.run", fake_run), patch("shutil.which", which_only("claude")):
-            out = router._claude(["--model", "haiku", "--tools", "", "--no-session-persistence"],
+            out = router._claude(["--model", "haiku", "--tools", "", "--no-session-persistence",
+                                  "--strict-mcp-config"],
                                  "ping", {"PATH": "/bin"}, None, 5)
         self.assertEqual(out, "pong")
         self.assertEqual(calls[-1], ["/bin/claude", "-p", "--model", "haiku"])

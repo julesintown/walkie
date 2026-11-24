@@ -34,18 +34,35 @@ def whisper_model(name, **kw):
 
 def transcribe(model, wav, hint=None):
     """Whisper-Text einer WAV-Datei: ohne Wiederholungen ("ja, ja, ja") und ohne die
-    typischen Stille-Halluzinationen. hint = erwartete Wörter (z. B. Optionen)."""
+    typischen Stille-Halluzinationen. hint = erwartete Wörter (z. B. Optionen).
+    temperature=0.0: keine Neuversuche. Sonst setzt faster-whisper bei unsicherem Ergebnis bis zu
+    fünfmal neu an (gestörte Bluetooth-Aufnahme: 16–20 s statt 2–4 s), und heraus kommt trotzdem
+    Wortsalat. Saubere Aufnahmen erkennt es beim ersten Versuch, dort ändert sich nichts."""
     kw = {"initial_prompt": ". ".join(hint) + "."} if hint else {}
-    segs, _ = model.transcribe(load_wav(wav), language=S.get("WALKIE_LANG") or None,
+    audio = load_wav(wav)
+    segs, _ = model.transcribe(audio, language=S.get("WALKIE_LANG") or None,
                                vad_filter=True, beam_size=1, condition_on_previous_text=False,
+                               temperature=0.0, max_new_tokens=max_tokens(len(audio) / 16000),
                                **kw)
-    text = " ".join(s.text.strip() for s in segs).strip()
+    # Schleife („桌上桌上…“, „halt, halt, …“): Whisper markiert sie selbst mit hoher Kompressionsrate
+    text = " ".join(s.text.strip() for s in segs
+                    if getattr(s, "compression_ratio", 0) <= LOOP_RATIO).strip()
     text = re.sub(r"\s*[\[(][^\])]{1,30}[\])]\s*", " ", text).strip()   # [Musik], (Stille) – aus VoiceMode
     text = re.sub(r"\s*(\*[^*]{1,30}\*|♪[^♪]*♪?)\s*", " ", text).strip()  # *lacht*, ♪ … ♪ – aus VoiceTerm
     text = re.sub(r"\b((?:\w+\W+){0,2}?\w+)(?:[,.!]?\s+\1\b)+", r"\1", text, flags=re.I)
     if hint and len(hint) > 1 and text.rstrip(".") == kw["initial_prompt"].rstrip("."):
         return ""                                  # Stille: Whisper wiederholt nur den Hinweis
     return "" if HALLUCINATIONS.match(text) else text
+
+
+LOOP_RATIO = 2.4          # faster-whispers eigene Grenze für „wiederholt sich“
+
+
+def max_tokens(seconds):
+    """Obergrenze neuer Tokens pro 30-s-Stück: schnelles Sprechen ergibt ~5 Tokens/s. Eine
+    Schleife läuft sonst bis 448 Tokens (Sekunden Rechenzeit). Höchstens 220, damit Hinweisliste
+    (≤ 223 Tokens) plus Antwort in Whispers 448er-Fenster passen."""
+    return int(min(220, 30 + 8 * min(seconds, 30)))
 
 
 def load_wav(path):

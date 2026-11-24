@@ -44,14 +44,10 @@
       <FrameWidth>192</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
-        <Duration>4</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
       </Durations>
     </Anim>
     <Anim>
@@ -106,8 +102,7 @@
         <Duration>7</Duration>
         <Duration>12</Duration>
         <Duration>20</Duration>
-        <Duration>22</Duration>
-        <Duration>22</Duration>
+        <Duration>44</Duration>
         <Duration>18</Duration>
       </Durations>
     </Anim>
@@ -184,11 +179,9 @@
       <FrameWidth>192</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
-        <Duration>16</Duration>
-        <Duration>8</Duration>
+        <Duration>24</Duration>
         <Duration>31</Duration>
-        <Duration>26</Duration>
-        <Duration>13</Duration>
+        <Duration>39</Duration>
         <Duration>21</Duration>
       </Durations>
     </Anim>
@@ -200,14 +193,12 @@
       <Durations>
         <Duration>9</Duration>
         <Duration>6</Duration>
-        <Duration>6</Duration>
-        <Duration>6</Duration>
+        <Duration>12</Duration>
         <Duration>6</Duration>
         <Duration>6</Duration>
         <Duration>7</Duration>
         <Duration>6</Duration>
-        <Duration>6</Duration>
-        <Duration>6</Duration>
+        <Duration>12</Duration>
         <Duration>6</Duration>
         <Duration>6</Duration>
         <Duration>6</Duration>
@@ -233,8 +224,7 @@
         <Duration>8</Duration>
         <Duration>8</Duration>
         <Duration>8</Duration>
-        <Duration>8</Duration>
-        <Duration>8</Duration>
+        <Duration>16</Duration>
         <Duration>8</Duration>
         <Duration>8</Duration>
       </Durations>
@@ -242,7 +232,7 @@
     <Anim>
       <Name>Fall</Name>
       <Index>13</Index>
-      <FrameWidth>192</FrameWidth>
+      <FrameWidth>456</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
         <Duration>8</Duration>
@@ -258,7 +248,7 @@
     <Anim>
       <Name>Jump</Name>
       <Index>14</Index>
-      <FrameWidth>192</FrameWidth>
+      <FrameWidth>456</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
         <Duration>60</Duration>
@@ -312,6 +302,23 @@
       <FrameHeight>264</FrameHeight>
       <Durations>
         <Duration>60</Duration>
+      </Durations>
+    </Anim>
+    <Anim>
+      <Name>Turn</Name>
+      <Index>19</Index>
+      <FrameWidth>456</FrameWidth>
+      <FrameHeight>384</FrameHeight>
+      <Durations>
+        <Duration>3</Duration>
+        <Duration>3</Duration>
+        <Duration>4</Duration>
+        <Duration>3</Duration>
+        <Duration>3</Duration>
+        <Duration>3</Duration>
+        <Duration>3</Duration>
+        <Duration>4</Duration>
+        <Duration>3</Duration>
       </Durations>
     </Anim>
     <Anim>

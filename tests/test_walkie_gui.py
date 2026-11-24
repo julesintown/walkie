@@ -322,6 +322,49 @@ class WalkieTest(unittest.TestCase):
         b.remember_terminal_conversation({"session": "fremd", "agent": "claude"})
         self.assertEqual(b.terminal_state()["id"], "neu-1", "nur Ereignisse aus dem Walkie-Terminal")
 
+    def test_bluetooth_start_beep_waits_for_signal_and_is_blanked(self):
+        """BT-Telefonmodus: Piep erst bei echtem Signal; der Ton wird in der Aufnahme genullt."""
+        import struct
+        b, ev = self.b, self.ev
+        path = TMP / "bt.wav"
+        signal = struct.pack("<8h", *[500] * 8)
+        path.write_bytes(b"\0" * 44 + b"\0\0" * 100 + signal + struct.pack("<50h", *[900] * 50))
+
+        class Rec:
+            def data_bytes(self):
+                return path.stat().st_size - 44 - 40       # die letzten 20 Samples: nach dem Ton
+
+        rec = Rec()
+        b.rec_proc, b.live_wait = rec, True
+        beeps = []
+        with patch.object(ev, "beep", lambda *a, **k: beeps.append(a)), \
+                patch.object(type(b), "BEEP_TAIL", 0):
+            b._beep_when_live(rec, str(path))
+        data = path.read_bytes()[44:]
+        mark = rec.data_bytes()
+        self.assertEqual(beeps, [()])
+        self.assertFalse(b.live_wait)
+        self.assertEqual(data[:mark], bytes(mark))         # Ton und Anlauf ausgeblendet
+        self.assertNotEqual(data[mark:], bytes(len(data) - mark))
+        self.assertEqual(b.rec_pos, 44 + mark)
+        b.rec_proc = None
+
+    def test_talk_pipeline_logs_step_timings(self):
+        """Eine Logzeile pro Äußerung: Dauer von Vokabel, Whisper, Router und Zustellen."""
+        import queue
+        b, ev = self.b, self.ev
+        b.say_q = queue.Queue()
+        lines = []
+        with patch.object(ev, "transcribe", lambda model, wav, hint=None: "Hallo du."), \
+                patch.object(ev.router, "understand",
+                             lambda text, sessions, **k: ("unclear", None, text)), \
+                patch.object(ev, "dbg", lines.append):
+            b.talk_pipeline(str(TMP / "nichts.wav"), laps=ev.Laps())
+        timing = [x for x in lines if x.startswith("zeiten: ")]
+        self.assertEqual(len(timing), 1)
+        for step in ("vokabel", "whisper", "router", "unclear", "gesamt"):
+            self.assertIn(f"{step} ", timing[0])
+
     def test_overview_question_goes_to_the_model_with_facts(self):
         """Ob kurz, eine Session oder Projektstand: das Modell entscheidet anhand der Frage."""
         import queue
@@ -1262,6 +1305,38 @@ class WalkieTest(unittest.TestCase):
             r = s.anims["Walk"].frame(RIGHT, 0).toImage()
             left = s.anims["Walk"].frame(LEFT, 0).toImage()
             self.assertEqual(r.mirrored(True, False), left, d)
+
+    def test_turns_around_before_walking_back(self):
+        """Mit Turn-Animation dreht sich die Figur erst sichtbar um und läuft dann los."""
+        from sprite import LEFT, RIGHT, Animator, SpriteSet
+        b = self.b
+        b.anim = Animator(SpriteSet(self.ev.S.DEFAULT_FIGURE, scale=1))
+        b.wander, b.dir = True, 1
+        x0 = b.x()
+        b.target_x = x0 - 100
+        b.step()
+        self.assertEqual((b.anim.name, b.anim.row, b.x()), ("Turn", RIGHT, x0))
+        for _ in range(300):
+            b.step()
+            if b.x() != x0:
+                break
+        self.assertEqual((b.dir, b.anim.name, b.anim.row), (-1, "Walk", LEFT))
+
+    def test_drag_faces_drag_direction(self):
+        """Beim Tragen schaut die Figur in die Richtung, in die sie gezogen wird."""
+        from types import SimpleNamespace
+        from PyQt6.QtCore import QPoint, QPointF
+        b = self.b
+        b.drag_off, b.dir = QPoint(0, 0), -1
+
+        def to(x):
+            return SimpleNamespace(globalPosition=lambda: QPointF(x, b.y()))
+        b.mouseMoveEvent(to(b.x() + 20))
+        self.assertEqual((b.dir, b.turn_from), (1, 0))      # sofort, ohne Dreh-Animation
+        b.mouseMoveEvent(to(b.x() + 1))                     # Zittern ändert nichts
+        self.assertEqual(b.dir, 1)
+        b.mouseMoveEvent(to(b.x() - 20))
+        self.assertEqual(b.dir, -1)
 
     def test_agent_model_reaches_command(self):
         import agents

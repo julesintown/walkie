@@ -127,5 +127,8 @@
  "Terminal als Panel über der Figur": "Terminal as a panel above the figure",
  "Nur Linux mit kitty: ein randloses Terminal direkt über der Figur statt eines normalen Terminalfensters.": "Linux with kitty only: a borderless terminal right above the figure instead of a normal terminal window.",
  "Leer = Walkie. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md).": "Empty = Walkie. Folder with AnimData.xml + *-Anim.png (see figures/CREDITS.md).",
- "Jede Antwort deiner Sessions vorlesen – auch auf getippte Nachrichten. Aus: nur kurze Ansagen, wenn etwas fertig ist.": "Read every answer of your sessions aloud – also to typed messages. Off: only short announcements when something is done."
+ "Jede Antwort deiner Sessions vorlesen – auch auf getippte Nachrichten. Aus: nur kurze Ansagen, wenn etwas fertig ist.": "Read every answer of your sessions aloud – also to typed messages. Off: only short announcements when something is done.",
+ "Das Claude-Diktat gibt es nur mit Claude Code als Agent.": "Claude dictation is only available with Claude Code as the agent.",
+ "Das Claude-Diktat braucht das Terminal-Panel über der Figur.": "Claude dictation needs the terminal panel above the figure.",
+ "Das Claude-Diktat tippt nur ins eigene Panel-Terminal, nicht beim Weiterleiten an Sessions.": "Claude dictation only types into the own panel terminal, not when forwarding to sessions."
 }
