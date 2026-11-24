@@ -3,7 +3,7 @@
 **Talk to Claude Code through your headphones.**
 
 You kick off a refactor, go make coffee, and halfway down the hall your headphones say:
-*"Needs you: run the migrations?"* You say *"yes"*. Done. Back at the desk, a little fox is
+*"Needs you: run the migrations?"* You say *"yes"*. Done. Back at the desk, a little companion is
 sitting on top of the terminal that's working – shaking with effort.
 
 Walkie is a small companion that lives on your desktop and makes Claude Code
@@ -184,8 +184,8 @@ walkie start | stop | restart | status | doctor
 
 ## Figures
 
-Fox (default), frog and slime – free pixel art (CC0, see `figures/CREDITS.md`), converted by
-`tools/make_figures.py`. Your own figures: any folder with `AnimData.xml` and
+Rußpelz (default, a Shimeji with climbing, ceiling and edge poses), plus fox, frog and slime –
+free pixel art (CC0) converted by `tools/make_figures.py`. Sources in `figures/CREDITS.md`. Your own figures: any folder with `AnimData.xml` and
 `<Animation>-Anim.png` sheets (8 directions) via *Settings → Figure → Own folder*.
 
 **Shimeji packs** (`shime1.png` … `shime46.png`, Shimeji-ee layout) can be imported as they

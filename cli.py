@@ -597,7 +597,7 @@ def cmd_sprite(args):
                 p = install_dir() / base / args[1]
         if not (p / "AnimData.xml").exists():
             die(f"Kein Sprite-Ordner: {args[1]} (siehe walkie sprite installed)")
-        S.set("WALKIE_SPRITE", "" if p.resolve() == (install_dir() / "figures" / "fox").resolve()
+        S.set("WALKIE_SPRITE", "" if p.resolve() == S.DEFAULT_FIGURE.resolve()
               else str(p.resolve()))
         ok(f"Figur: {p.name}")
     elif sub == "import" and len(args) > 1:

@@ -61,7 +61,6 @@
  "Kopfhörertasten (macOS)": "Headset buttons (macOS)",
  "Kurze Hin-und-her-Runden werden nicht angesagt.": "Short back-and-forth turns are not announced.",
  "Lange Antworten in einem Satz (kostet ein paar hundert Tokens).": "Long answers in one sentence (costs a few hundred tokens).",
- "Leer = Fuchs. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md).": "Empty = fox. Folder with AnimData.xml + *-Anim.png (see figures/CREDITS.md).",
  "Leer = Ordner des Walkie.": "Empty = the Walkie folder.",
  "Leer = Standard des Agents. Bei Claude z. B. sonnet, opus oder haiku.": "Empty = the agent’s default. For Claude e.g. sonnet, opus or haiku.",
  "Leer = Systemstandard (bei Kopfhörer: dessen Mikro).": "Empty = system default (with a headset: its mic).",
@@ -127,5 +126,6 @@
  "Andere Programme spielen so lange mit diesem Anteil ihrer Lautstärke weiter und danach wieder wie vorher. 100 = nicht leiser.": "Other apps keep playing at this share of their volume meanwhile and return to their previous volume afterwards. 100 = don’t lower.",
  "Ins Panel-Terminal über der Figur (braucht kitty und das Panel)": "To the panel terminal above the figure (needs kitty and the panel)",
  "Terminal als Panel über der Figur": "Terminal as a panel above the figure",
- "Nur Linux mit kitty: ein randloses Terminal direkt über der Figur statt eines normalen Terminalfensters.": "Linux with kitty only: a borderless terminal right above the figure instead of a normal terminal window."
+ "Nur Linux mit kitty: ein randloses Terminal direkt über der Figur statt eines normalen Terminalfensters.": "Linux with kitty only: a borderless terminal right above the figure instead of a normal terminal window.",
+ "Leer = Rußpelz. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md).": "Empty = Rußpelz. Folder with AnimData.xml + *-Anim.png (see figures/CREDITS.md)."
 }

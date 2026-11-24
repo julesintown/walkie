@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_FIGURE = HERE / "figures" / "fox"
+DEFAULT_FIGURE = HERE / "figures" / "russpelz"
 CONFIG = Path(os.environ.get("WALKIE_CONFIG") or Path(
     os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "walkie" / "config.env")
 
@@ -130,7 +130,7 @@ SCHEMA = [
 
     # ---- Figur
     Setting("WALKIE_SPRITE", "path", "", "figure", "Figur (Sprite-Ordner)",
-            "Leer = Fuchs. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md)."),
+            "Leer = Rußpelz. Ordner mit AnimData.xml + *-Anim.png (siehe figures/CREDITS.md)."),
     Setting("WALKIE_SCALE", "int", 4, "figure", "Größe", "Pixel-Vergrößerung.", min=2, max=8),
 
     # ---- Kopfhörer

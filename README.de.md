@@ -4,7 +4,7 @@
 
 Du stößt ein Refactoring an, holst dir einen Kaffee, und auf halbem Weg sagt dein Kopfhörer:
 *„Braucht dich: Migrationen ausführen?“* Du sagst *„ja“*. Erledigt. Zurück am Schreibtisch sitzt
-ein kleiner Fuchs oben auf dem Terminal, das gerade arbeitet – und rüttelt sich vor Eifer.
+ein kleiner Begleiter oben auf dem Terminal, das gerade arbeitet – und rüttelt sich vor Eifer.
 
 Walkie ist ein kleiner Begleiter auf deinem Desktop, mit dem du Claude Code **freihändig**
 nutzt. Er sagt an, was deine Sessions machen, liest ihre Fragen und Freigaben vor, nimmt deine
@@ -187,8 +187,8 @@ walkie start | stop | restart | status | doctor
 
 ## Figuren
 
-Fuchs (Standard), Frosch und Schleim – freie Pixel-Art (CC0, siehe `figures/CREDITS.md`), mit
-`tools/make_figures.py` umgebaut. Eigene Figuren: jeder Ordner mit `AnimData.xml` und
+Rußpelz (Standard, ein Shimeji mit Kletter-, Decken- und Kantenposen), dazu Fuchs, Frosch und
+Schleim – freie Pixel-Art (CC0), mit `tools/make_figures.py` umgebaut. Quellen in `figures/CREDITS.md`. Eigene Figuren: jeder Ordner mit `AnimData.xml` und
 `<Animation>-Anim.png` (8 Richtungen) über *Einstellungen → Figur → Eigener Ordner*.
 
 **Shimeji-Pakete** (`shime1.png` … `shime46.png`, Shimeji-ee-Belegung) lassen sich direkt
