@@ -15,7 +15,7 @@
   walkie keys reset
   walkie voice list | use NAME    Stimmen (lädt fehlende herunter)
   walkie sprite installed | use ORDNER|NAME   Figur wechseln
-  walkie setup [--no-start] [--no-assets]   Umgebung und Pakete installieren, Modelle optional
+  walkie setup [--lang de|en] [--no-start] [--no-assets]   einrichten (fragt sonst nach der Sprache)
   walkie doctor [--allow-missing-agent]     Installation und Agent prüfen
   walkie drafts [clear]           ausstehende oder unbestätigte Diktate lesen (clear: löschen)
   walkie sessions                 welche Claude-Sessions der Walkie gerade kennt
@@ -687,6 +687,37 @@ def cmd_missed(args):
         print(json.loads(r.read())["text"])
 
 
+def choose_language(args):
+    """Sprache einmal festlegen, bevor die Stimme geladen wird: --lang de|en, sonst im Terminal
+    fragen (Vorschlag: Systemsprache, unter WSL die von Windows). Ohne Terminal und ohne
+    --lang bleibt es bei „automatisch“."""
+    from i18n import LANGS, system_lang
+    code = None
+    if "--lang" in args:
+        i = args.index("--lang")
+        code = args[i + 1].lower() if i + 1 < len(args) else ""
+        if code not in LANGS:
+            die(f"--lang: {', '.join(LANGS)}")
+    elif S.raw_values().get("WALKIE_UI_LANG") in LANGS:
+        return                                  # schon gewählt (erneutes Setup)
+    elif sys.stdin is not None and sys.stdin.isatty():
+        guess = system_lang()
+        names = {"de": "Deutsch", "en": "English"}
+        print(bold("Sprache / Language") + "  " + "  ".join(
+            f"[{i + 1}] {names[c]}" for i, c in enumerate(LANGS)) + dim(f"  (Enter = {names[guess]})"))
+        try:
+            answer = input("> ").strip().lower()
+        except EOFError:
+            answer = ""
+        code = guess
+        for i, c in enumerate(LANGS):
+            if answer in (str(i + 1), c, names[c].lower()):
+                code = c
+    if code:
+        S.set("WALKIE_UI_LANG", code)          # Stimme und Erkennung folgen (settings.set)
+        ok(f"{'Sprache' if code == 'de' else 'Language'}: {code} · {S.get('WALKIE_VOICE')}")
+
+
 def cmd_setup(args):
     """Alles in einem Schritt: Python-Umgebung, Pakete, Stimme, Whisper-Modell, starten.
     Läuft auf Linux, macOS und Windows; braucht keine Adminrechte."""
@@ -706,6 +737,7 @@ def cmd_setup(args):
             "  Windows: winget install Python.Python.3.12\n"
             "  macOS:   brew install python@3.12  (oder python.org)\n"
             "  Linux:   über die Paketverwaltung, z. B. sudo apt install python3 python3-venv")
+    choose_language(args)
     venv = Path(os.environ.get("WALKIE_VENV") or paths.VENV)
     py = paths.venv_python(venv)
     step = lambda n, t: print(f"\n{accent(bold(f'[{n}/5]'))} {bold(t)}", flush=True)  # noqa: E731
@@ -939,10 +971,10 @@ def cmd_doctor(args):
     sys.exit(subprocess.call([paths.python(), str(install_dir() / "doctor.py"), *args]))
 
 
-def cmd_gui(_args):
+def cmd_gui(args):
     import paths
     paths.HERE = install_dir()
-    paths.launch("settings_gui.py")
+    paths.launch("settings_gui.py", *(["--setup"] if "--setup" in args else []))
     ok("Einstellungsfenster geöffnet")
 
 

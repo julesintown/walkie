@@ -14,7 +14,9 @@ absoluten Pfad. Verwende denselben Starter für die weiteren Befehle.
 
 1. Läuft Walkie bereits, bestätige den Status kurz.
 2. Andernfalls prüfe mit `walkie doctor`, ob die Abhängigkeiten vorhanden sind.
-   Bei fehlenden Paketen verwende `walkie setup`. Das richtet Walkie ein und startet ihn.
+   Bei fehlenden Paketen verwende `walkie setup --lang de` bzw. `--lang en` – passend zur
+   Sprache, in der der Nutzer mit dir spricht. Das richtet Walkie ein und startet ihn; beim
+   ersten Start führt ein Assistent durch Sprache, Agent, Mikrofon und Kopfhörer.
 3. Bei fertiger Installation führe `walkie start` aus und prüfe mit `walkie status`.
 4. Einstellungen lassen sich mit `walkie gui` öffnen.
 5. Meldet `walkie setup` oder `walkie doctor` fehlende Systembibliotheken (Linux, z. B. unter

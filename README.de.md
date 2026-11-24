@@ -63,6 +63,7 @@ eine Session an zu arbeiten, hüpft er auf deren Terminal und arbeitet sichtbar 
 anderes Aussehen? Jedes Shimeji-Paket lässt sich mit einem Befehl übernehmen.
 
 ### ⚙️ Einstellungen, die man findet
+Beim ersten Start führt ein Assistent durch Sprache, Agent, Mikrofon und Kopfhörer. Danach:
 Rechtsklick auf die Figur → *Einstellungen …*. Mit **Sprache / Language** wechselst du zwischen
 Deutsch und Englisch. Menüs, Ansagen, Erkennung und Vorlesestimme wechseln gemeinsam.
 Das Fenster lässt sich auch mit `walkie gui` öffnen.

@@ -16,3 +16,8 @@ for key, sub in (("WALKIE_RUN", "run"), ("WALKIE_CONFIG", "config.env"),
 (ROOT / "xdg").mkdir(exist_ok=True)
 # Tests verändern nie die echte Lautstärke anderer Programme (ducking.py)
 os.environ.setdefault("WALKIE_DUCK", "100")
+# Sprache deterministisch und ohne PowerShell-Abfrage (WSL), kein Schreiben in ~/.cache
+os.environ.setdefault("XDG_CACHE_HOME", str(ROOT / "cache"))
+if not any(os.environ.get(k) not in (None, "", "C", "POSIX", "C.UTF-8")
+           for k in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE")):
+    os.environ["LC_MESSAGES"] = "en_US.UTF-8"

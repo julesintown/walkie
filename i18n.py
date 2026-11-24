@@ -24,11 +24,59 @@ LANGS = ("de", "en")
 _tables = {}
 
 
+_windows_lang = []
+
+
+def wsl_windows_lang():
+    """Unter WSL ist die Linux-Sprache oft nur C.UTF-8 – dann zählt die von Windows.
+    Einmal abgefragt (mit Zeitlimit) und gemerkt; außerhalb von WSL: None."""
+    if _windows_lang:
+        return _windows_lang[0]
+    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "walkie" / "windows-lang"
+    try:
+        cached = cache.read_text(encoding="ascii").strip()
+        if cached in LANGS:
+            _windows_lang.append(cached)
+            return cached
+    except OSError:
+        pass
+    code = None
+    try:
+        if "microsoft" in Path("/proc/version").read_text(encoding="utf-8").lower():
+            import shutil
+            import subprocess
+            ps = shutil.which("powershell.exe") or next(
+                (str(c) for c in Path("/mnt").glob("*/Windows/System32/WindowsPowerShell/v1.0/"
+                                                  "powershell.exe")), None)
+            if ps is None:
+                raise OSError("powershell.exe fehlt")
+            r = subprocess.run([ps, "-NoProfile", "-NonInteractive", "-Command",
+                                "(Get-UICulture).Name"], capture_output=True, text=True,
+                               timeout=5)
+            name = (r.stdout or "").strip().lower()
+            if name:
+                code = "de" if name.startswith("de") else "en"
+    except (OSError, ValueError, Exception):  # noqa: BLE001 – nur ein Vorschlag
+        code = None
+    _windows_lang.append(code)
+    if code:
+        try:                                   # Hooks laden i18n bei jedem Ereignis
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(code, encoding="ascii")
+        except OSError:
+            pass
+    return code
+
+
 def system_lang():
     for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
         v = os.environ.get(var)
         if v and v not in ("C", "POSIX", "C.UTF-8"):
             return "de" if v.lower().startswith("de") else "en"
+    if os.name == "posix":
+        win = wsl_windows_lang()
+        if win:
+            return win
     try:
         loc = locale.getlocale()[0] or ""
     except (ValueError, TypeError):

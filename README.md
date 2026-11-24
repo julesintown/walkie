@@ -60,7 +60,8 @@ hops onto that terminal and works along. Want a different look? Any Shimeji pack
 one command.
 
 ### ⚙️ Settings you'll actually find
-Right-click the figure and choose *Settings …*. **Sprache / Language** switches between English
+On first start, a short guide walks you through language, agent, microphone and headphones.
+Afterwards, right-click the figure and choose *Settings …*. **Sprache / Language** switches between English
 and German for menus, announcements, speech recognition and the reading voice.
 You can also open the window with `walkie gui`.
 

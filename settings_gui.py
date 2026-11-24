@@ -35,19 +35,12 @@ WELCOMED = RUN / "welcomed"          # Ersteinrichtung gesehen -> nicht mehr aut
 
 
 # ------------------------------------------------------------------ Theme (Claude-Look)
-LIGHT = dict(bg="#FAF9F5", side="#F0EEE6", card="#FFFFFF", border="#E5E3DA", text="#141413",
-             muted="#73726C", accent="#D97757", accent_hi="#C6613F", hover="#E8E6DD",
-             select="#E3DFD3", field="#FFFFFF", track="#D6D3C8")
-DARK = dict(bg="#262624", side="#1F1E1D", card="#30302E", border="#3E3D39", text="#F5F4EE",
-            muted="#A6A39A", accent="#D97757", accent_hi="#E08A6D", hover="#393835",
-            select="#45433E", field="#262624", track="#55534D")
-
-
-def is_dark():
-    try:
-        return QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
-    except AttributeError:
-        return QApplication.palette().window().color().lightness() < 128
+# Ein Look: minimalistisch schwarz, Weiß als Akzent (unabhängig vom System-Theme)
+NOIR = dict(bg="#0A0A0B", side="#0A0A0B", card="#141416", border="#232326", text="#EDEDEF",
+            muted="#8B8B92", accent="#F2F2F3", accent_text="#0A0A0B", accent_hi="#FFFFFF",
+            hover="#1C1C1F", select="#232327", field="#0F0F11", track="#2C2C31",
+            good="#7BD88F", warn="#E8C26A", bad="#F07171")
+WINDOW_OPACITY = 0.97          # leicht durchscheinend (wo der Fenstermanager es kann)
 
 
 def stylesheet(c):
@@ -55,52 +48,70 @@ def stylesheet(c):
     QWidget {{ color: {c['text']}; font-size: 13px; }}
     #root {{ background: {c['bg']}; }}
     #side {{ background: {c['side']}; border-right: 1px solid {c['border']}; }}
-    #brand {{ font-size: 15px; font-weight: 600; padding: 4px 8px 14px 8px; }}
+    #brand {{ font-size: 15px; font-weight: 600; letter-spacing: 0.5px; padding: 4px 8px 18px 8px; }}
     #nav {{ background: transparent; border: none; outline: none; }}
-    #nav::item {{ padding: 8px 10px; border-radius: 8px; margin: 1px 0; }}
-    #nav::item:hover {{ background: {c['hover']}; }}
+    #nav::item {{ padding: 8px 10px; border-radius: 8px; margin: 1px 0; color: {c['muted']}; }}
+    #nav::item:hover {{ background: {c['hover']}; color: {c['text']}; }}
     #nav::item:selected {{ background: {c['select']}; color: {c['text']}; }}
     #page {{ background: {c['bg']}; }}
     QScrollArea {{ border: none; background: {c['bg']}; }}
-    #pageTitle {{ font-family: "Georgia", "Tiempos Headline", serif; font-size: 26px;
-                  padding: 6px 0 2px 0; }}
+    QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
+    QScrollBar::handle:vertical {{ background: {c['track']}; border-radius: 3px; min-height: 30px; }}
+    QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px 4px; }}
+    QScrollBar::handle:horizontal {{ background: {c['track']}; border-radius: 3px; min-width: 30px; }}
+    QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page
+        {{ background: none; height: 0; width: 0; }}
+    #pageTitle {{ font-size: 26px; font-weight: 300; letter-spacing: 0.3px; padding: 6px 0 2px 0; }}
     #pageSub {{ color: {c['muted']}; padding-bottom: 10px; }}
-    #card {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 12px; }}
+    #stepTitle {{ font-size: 30px; font-weight: 300; padding: 4px 0 4px 0; }}
+    #stepSub {{ color: {c['muted']}; font-size: 14px; padding-bottom: 14px; }}
+    #dots {{ color: {c['muted']}; font-size: 12px; letter-spacing: 1px; }}
+    #card {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 14px; }}
     #cardTitle {{ font-weight: 600; font-size: 14px; }}
     #rowTitle {{ font-weight: 500; }}
     #help, #muted {{ color: {c['muted']}; font-size: 12px; }}
+    #good {{ color: {c['good']}; }} #warn {{ color: {c['warn']}; }} #bad {{ color: {c['bad']}; }}
     #sep {{ background: {c['border']}; max-height: 1px; min-height: 1px; }}
-    #banner {{ background: {c['accent']}; border-radius: 10px; }}
-    #banner QLabel {{ color: white; font-weight: 500; }}
-    #banner QPushButton {{ background: white; color: {c['accent_hi']}; border: none;
-                          border-radius: 8px; padding: 6px 12px; font-weight: 600; }}
+    #banner {{ background: {c['card']}; border: 1px solid {c['accent']}; border-radius: 12px; }}
+    #banner QLabel {{ font-weight: 500; }}
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
-        background: {c['field']}; border: 1px solid {c['border']}; border-radius: 8px;
-        padding: 5px 8px; min-height: 20px; selection-background-color: {c['accent']}; }}
+        background: {c['field']}; color: {c['text']}; border: 1px solid {c['border']};
+        border-radius: 8px; padding: 4px 8px; min-height: 22px;
+        selection-background-color: {c['select']}; selection-color: {c['text']}; }}
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
-        border: 1px solid {c['accent']}; }}
+        border: 1px solid {c['muted']}; }}
+    QSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::up-button,
+    QDoubleSpinBox::down-button {{ subcontrol-origin: border; width: 0; border: none; }}
     QComboBox::drop-down {{ border: none; width: 22px; }}
     QComboBox QAbstractItemView {{ background: {c['card']}; border: 1px solid {c['border']};
         selection-background-color: {c['select']}; selection-color: {c['text']}; outline: none; }}
-    QPushButton {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 8px;
-                   padding: 6px 14px; }}
-    QPushButton:hover {{ background: {c['hover']}; }}
-    QPushButton:disabled {{ color: {c['muted']}; }}
-    QPushButton#primary {{ background: {c['accent']}; color: white; border: none; font-weight: 600; }}
+    QPushButton {{ background: transparent; border: 1px solid {c['border']}; border-radius: 10px;
+                   padding: 7px 16px; }}
+    QPushButton:hover {{ background: {c['hover']}; border-color: {c['track']}; }}
+    QPushButton:disabled {{ color: {c['muted']}; border-color: {c['border']}; }}
+    QPushButton#primary {{ background: {c['accent']}; color: {c['accent_text']}; border: none;
+                           font-weight: 600; }}
     QPushButton#primary:hover {{ background: {c['accent_hi']}; }}
-    QPushButton#primary:disabled {{ background: {c['track']}; }}
+    QPushButton#primary:disabled {{ background: {c['track']}; color: {c['muted']}; }}
+    QPushButton#choice {{ text-align: left; padding: 14px 16px; border-radius: 12px;
+                          background: {c['card']}; font-size: 14px; }}
+    QPushButton#choice:hover {{ border-color: {c['muted']}; }}
+    QPushButton#choice:checked {{ border: 1px solid {c['accent']}; background: {c['select']}; }}
+    QPushButton#link {{ border: none; color: {c['muted']}; padding: 4px 6px; }}
+    QPushButton#link:hover {{ color: {c['text']}; background: transparent; }}
     QListWidget#list {{ background: {c['field']}; border: 1px solid {c['border']};
                         border-radius: 8px; outline: none; }}
     QListWidget#list::item {{ padding: 5px 8px; border-radius: 6px; }}
     QListWidget#list::item:selected {{ background: {c['select']}; color: {c['text']}; }}
-    QProgressBar {{ background: {c['track']}; border: none; border-radius: 4px; max-height: 8px; }}
-    QProgressBar::chunk {{ background: {c['accent']}; border-radius: 4px; }}
+    QProgressBar {{ background: {c['track']}; border: none; border-radius: 3px; max-height: 6px; }}
+    QProgressBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
     QSlider::groove:horizontal {{ height: 4px; background: {c['track']}; border-radius: 2px; }}
     QSlider::sub-page:horizontal {{ background: {c['accent']}; border-radius: 2px; }}
-    QSlider::handle:horizontal {{ background: white; border: 1px solid {c['border']};
-                                  width: 16px; margin: -7px 0; border-radius: 8px; }}
-    #mono {{ font-family: monospace; font-size: 12px; }}
-    #hl {{ border: 2px solid {c['accent']}; }}
+    QSlider::handle:horizontal {{ background: {c['accent']}; border: none;
+                                  width: 14px; margin: -5px 0; border-radius: 7px; }}
+    QToolTip {{ background: {c['card']}; color: {c['text']}; border: 1px solid {c['border']}; }}
+    #mono {{ font-family: monospace; font-size: 12px; color: {c['muted']}; }}
+    #hl {{ border: 1px solid {c['accent']}; }}
     """
 
 
@@ -127,8 +138,8 @@ class Toggle(QAbstractButton):
             col.setAlpha(110)
         p.setBrush(col)
         p.drawRoundedRect(QRectF(0, 0, 40, 22), 11, 11)
-        p.setBrush(QColor("white"))
-        p.drawEllipse(QPointF(29 if on else 11, 11), 8, 8)
+        p.setBrush(QColor(self.c["accent_text"] if on else self.c["muted"]))
+        p.drawEllipse(QPointF(29 if on else 11, 11), 7, 7)
 
 
 class Bg(QObject):
@@ -185,10 +196,14 @@ def hbox(*widgets, stretch_at=None, spacing=8):
 
 # ------------------------------------------------------------------ Fenster
 class SettingsWindow(QWidget):
-    def __init__(self, walkie=None):
+    def __init__(self, walkie=None, setup=None):
+        """setup=True: geführte Ersteinrichtung (Standard beim allerersten Öffnen)."""
         super().__init__()
         self.walkie = walkie
-        self.c = DARK if is_dark() else LIGHT
+        self.setup_mode = (not WELCOMED.exists()) if setup is None else bool(setup)
+        self.step = 0
+        self.c = NOIR
+        self.setWindowOpacity(WINDOW_OPACITY)
         self.resize(940, 680)
         self.setObjectName("root")
         self.setStyleSheet(stylesheet(self.c))
@@ -204,9 +219,10 @@ class SettingsWindow(QWidget):
         if self.ui_language != lang():
             self.build_ui(self.current_page())
 
-    PAGES = ["welcome", "general", "figure", "headset", "ask", "voice", "info"]
+    PAGES = ["general", "figure", "headset", "ask", "voice", "info"]
+    STEPS = ["language", "agent", "mic", "headset", "done"]
 
-    def build_ui(self, page="welcome"):
+    def build_ui(self, page="general"):
         """Inhalt (neu) aufbauen – auch nach einem Wechsel der Oberflächensprache.
         Das Fenster selbst bleibt dasselbe (walkie.settings_win zeigt weiter darauf)."""
         self.ui_language = lang()
@@ -226,10 +242,14 @@ class SettingsWindow(QWidget):
             self.layout().removeWidget(self.content)
             self.content.hide()
             self.content.deleteLater()
-        self.setWindowTitle(t("{name} – Einstellungen", name=S.get("WALKIE_NAME")))
         self.rows = {}            # key -> Widget (für Abhängigkeiten)
         self.content = QWidget()
         self.layout().addWidget(self.content)
+        if self.setup_mode:
+            self.setWindowTitle(t("{name} einrichten", name=S.get("WALKIE_NAME")))
+            self.build_setup()
+            return
+        self.setWindowTitle(t("{name} – Einstellungen", name=S.get("WALKIE_NAME")))
 
         lay = QHBoxLayout(self.content)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -240,6 +260,7 @@ class SettingsWindow(QWidget):
         sl.setContentsMargins(12, 18, 12, 12)
         sl.addWidget(label(f"{S.get('WALKIE_NAME')}", "brand"))
         self.nav = QListWidget(objectName="nav")
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         sl.addWidget(self.nav, 1)
         sl.addWidget(label(t("Gespeichert in") + "\n" + str(S.CONFIG).replace(str(Path.home()), "~")
                            if len(str(S.CONFIG)) < 60 else "", "help"))
@@ -255,7 +276,7 @@ class SettingsWindow(QWidget):
         rl.addWidget(self.stack, 1)
         lay.addWidget(right, 1)
 
-        titles = {"welcome": t("Erste Schritte"), "general": t("Allgemein"), "figure": t("Figur"),
+        titles = {"general": t("Allgemein"), "figure": t("Figur"),
                   "headset": t("Kopfhörer"), "ask": t("Fragen & Freigaben"),
                   "voice": t("Sprache & Modelle"), "info": t("Info")}
         for pid in self.PAGES:
@@ -267,8 +288,10 @@ class SettingsWindow(QWidget):
         self.update_deps()
 
     def current_page(self):
+        if self.setup_mode or getattr(self, "nav", None) is None:
+            return "setup" if self.setup_mode else "general"
         i = self.nav.currentRow()
-        return self.PAGES[i] if 0 <= i < len(self.PAGES) else "welcome"
+        return self.PAGES[i] if 0 <= i < len(self.PAGES) else "general"
 
     # ---------------- Bausteine ----------------
     def scroll(self, inner):
@@ -421,7 +444,8 @@ class SettingsWindow(QWidget):
             return
         if S.BY_KEY[key].restart and self.walkie is not None:
             self.needs_restart.add(key)
-            self.banner.show()
+            if not self.setup_mode:            # im Assistenten: Neustart beim Abschluss
+                self.banner.show()
         self.update_deps()
 
     def update_deps(self):
@@ -513,56 +537,157 @@ class SettingsWindow(QWidget):
         lb = label(text, "muted")
         self.add_row(card, f"{mark}  {title}", "", lb)
 
-    def page_welcome(self):
-        """Ersteinrichtung: was schon klappt, und wo es noch einen Handgriff braucht."""
-        pg = self.page(t("Erste Schritte"),
-                       t("In drei Schritten zu „mit {name} per Kopfhörer reden“.",
-                         name=S.get("WALKIE_NAME")))
-        c = self.card(pg, "Sprache / Language")
-        self.setting_row(c, "WALKIE_UI_LANG")
-        mics = [n for n, _ in audio.sources()]
+    # ---------------- Ersteinrichtung (geführt) ----------------
+    def build_setup(self):
+        """Schritt für Schritt statt Einstellungs-Chaos: Sprache, Agent, Mikrofon, Kopfhörer."""
+        outer = QVBoxLayout(self.content)
+        outer.setContentsMargins(56, 34, 56, 28)
+        outer.setSpacing(0)
+        top = QHBoxLayout()
+        top.addWidget(label(S.get("WALKIE_NAME"), "brand", wrap=False))
+        top.addStretch(1)
+        dots = " ".join("●" if i == self.step else "○" for i in range(len(self.STEPS)))
+        top.addWidget(label(f"{dots}   {self.step + 1}/{len(self.STEPS)}", "dots", wrap=False))
+        outer.addLayout(top)
+        body = QWidget(objectName="page")
+        self.setup_body = QVBoxLayout(body)
+        self.setup_body.setContentsMargins(0, 18, 0, 0)
+        self.setup_body.setSpacing(12)
+        getattr(self, "step_" + self.STEPS[self.step])()
+        self.setup_body.addStretch(1)
+        outer.addWidget(self.scroll(body), 1)
+        bar = QHBoxLayout()
+        back = QPushButton(t("Zurück"))
+        back.setVisible(self.step > 0)
+        back.clicked.connect(lambda: self.goto_step(self.step - 1))
+        bar.addWidget(back)
+        bar.addStretch(1)
+        if self.step < len(self.STEPS) - 1:
+            skip = QPushButton(t("Einrichtung überspringen"), objectName="link")
+            skip.clicked.connect(self.finish_welcome)
+            bar.addWidget(skip)
+            nxt = QPushButton(t("Weiter"), objectName="primary")
+            nxt.clicked.connect(lambda: self.goto_step(self.step + 1))
+        else:
+            nxt = QPushButton(t("Los geht's"), objectName="primary")
+            nxt.clicked.connect(self.finish_welcome)
+        nxt.setDefault(True)
+        bar.addWidget(nxt)
+        outer.addLayout(bar)
+
+    def goto_step(self, i):
+        self.step = max(0, min(len(self.STEPS) - 1, i))
+        self.build_ui()
+
+    def step_head(self, title, sub):
+        self.setup_body.addWidget(label(title, "stepTitle"))
+        self.setup_body.addWidget(label(sub, "stepSub"))
+
+    def choices(self, options, current, on_pick):
+        """Große Auswahlkarten (eine aktiv): options = [(wert, titel, untertitel)]."""
+        group = []
+        for value, title, sub in options:
+            b = QPushButton(title + (f"\n{sub}" if sub else ""), objectName="choice")
+            b.setCheckable(True)
+            b.setChecked(value == current)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            def pick(_=False, v=value, me=b):
+                for other in group:
+                    other.setChecked(other is me)
+                on_pick(v)
+            b.clicked.connect(pick)
+            group.append(b)
+            self.setup_body.addWidget(b)
+        return group
+
+    def step_language(self):
+        self.step_head(t("Hallo, ich bin {name}.", name=S.get("WALKIE_NAME")),
+                       t("In welcher Sprache sollen wir reden? Menüs, Ansagen, Spracherkennung "
+                         "und Stimme folgen dieser Wahl."))
+        self.choices([("de", "Deutsch", ""), ("en", "English", "")],
+                     lang(), lambda v: self.save("WALKIE_UI_LANG", v))
+
+    def step_agent(self):
+        import adapters
+        import shutil
+        self.step_head(t("Mit welchem Coding-Agent arbeitest du?"),
+                       t("Er läuft in deinen Terminals; ich höre mit, lese vor und gebe Freigaben "
+                         "per Stimme weiter. Weitere Agents kannst du später ergänzen."))
+        opts = []
+        for name in ("claude", "codex", "antigravity", "gemini"):
+            a = adapters.get(name)
+            found = shutil.which(a.binary)
+            opts.append((name, a.label, t("installiert") if found else t("nicht gefunden")))
+        self.choices(opts, S.get("WALKIE_AGENT"), lambda v: self.save("WALKIE_AGENT", v))
+
+    def step_mic(self):
+        self.step_head(t("Hörst du mich – höre ich dich?"),
+                       t("Wähle dein Mikrofon und sprich einen Satz zur Probe. Du siehst sofort, "
+                         "was ich verstanden habe."))
+        c = self.card(self.setup_page())
+        self.mic_box = QComboBox()
+        self.mic_box.setMinimumWidth(280)
+        self.fill_mics()
+        self.mic_box.currentIndexChanged.connect(
+            lambda _i: self.save("WALKIE_MIC", self.mic_box.currentData() or ""))
+        self.add_row(c, t("Mikrofon"), t("Ein Bluetooth-Kopfhörer-Mikro erscheint erst, wenn es "
+                                         "aktiv ist."), self.mic_box)
+        self.level = QProgressBar()
+        self.level.setRange(0, 100)
+        self.level.setTextVisible(False)
+        self.level.setFixedWidth(180)
+        self.test_btn = QPushButton(t("Probeaufnahme (4 s)"), objectName="primary")
+        self.test_btn.clicked.connect(self.test_mic)
+        self.add_row(c, t("Test"), t("Nimmt kurz auf, zeigt den Pegel und was ich verstehe."),
+                     hbox(self.level, self.test_btn))
+        self.test_result = label("", "muted")
+        c.lay.addWidget(self.test_result)
+        demo = QPushButton(t("Meine Stimme anhören"))
+        demo.clicked.connect(self.voice_demo)
+        demo.setEnabled(self.walkie is not None)
+        self.setup_body.addWidget(hbox(demo, None))
+
+    def step_headset(self):
         outs = audio.outputs()
         heads = keymap.headset_audio(outs)
         keys_ok, keys_text = keymap.key_status()
-
-        c = self.card(pg, t("1 · Mikrofon"),
-                      t("Sprich einen Satz zur Probe – du siehst sofort, was verstanden wurde."))
-        self.check_row(c, bool(mics), t("Mikrofon"),
-                       ", ".join(mics) if mics else t("keins gefunden – Kopfhörer verbinden"))
-        b = QPushButton(t("Mikro testen"), objectName="primary")
-        b.clicked.connect(lambda: self.goto("voice"))
-        c.lay.addWidget(hbox(b, None))
-
-        c = self.card(pg, t("2 · Kopfhörer"),
-                      t("Dein Bluetooth-Kopfhörer ist Lautsprecher, Mikro und Fernbedienung zugleich."))
+        self.step_head(t("Dein Kopfhörer ist die Fernbedienung."),
+                       t("Play heißt: ich höre zu. Ohne Kopfhörer geht es per Klick auf die Figur "
+                         "oder mit dem Hotkey."))
+        c = self.card(self.setup_page())
         self.check_row(c, True if heads else None, t("Als Audiogerät"),
                        ", ".join(heads) if heads else t("kein Kopfhörer verbunden"))
         self.check_row(c, keys_ok, t("Tasten"), keys_text)
         self.check_row(c, True, t("Hotkey (geht immer)"), S.get("WALKIE_HOTKEY") or t("aus"))
-        b = QPushButton(t("Taste anlernen"))
-        b.clicked.connect(lambda: self.goto("headset"))
         if keymap.keys_need_unlock():
             u = QPushButton(t("Tasten freischalten"), objectName="primary")
             u.setToolTip(t("Erlaubt dem Walkie, die Tasten deines Bluetooth-Kopfhörers zu lesen "
                            "(einmalig, fragt nach deinem Passwort)."))
             u.clicked.connect(lambda: self.unlock_keys(u))
-            c.lay.addWidget(hbox(u, b, None))
-        else:
-            c.lay.addWidget(hbox(b, None))
+            self.setup_body.addWidget(hbox(u, None))
 
-        c = self.card(pg, t("3 · So geht's"),
-                      t("Play am Kopfhörer, Klick auf die Figur oder der Hotkey: Pling = sprich. "
-                        "Ist eine Frage offen, beantwortest du sie (ja/nein/Option). Sonst geht dein "
-                        "Satz an die passende Claude-Session – oder der Walkie antwortet selbst. "
-                        "Fallender Ton = fertig zugehört."))
-        demo = QPushButton(t("Stimme anhören"))
-        demo.clicked.connect(self.voice_demo)
-        demo.setEnabled(self.walkie is not None)
-        done = QPushButton(t("Fertig – loslegen"), objectName="primary")
-        done.clicked.connect(self.finish_welcome)
-        c.lay.addWidget(hbox(demo, None, done))
-        pg.lay.addStretch(1)
-        return pg
+    def step_done(self):
+        self.step_head(t("Fertig. So redest du mit mir:"),
+                       t("Drück Play (oder klick auf die Figur) – nach dem Pling sprichst du."))
+        c = self.card(self.setup_page())
+        for title, text in (
+                (t("Einfach reden"), t("Ich schicke deinen Satz an die passende Session, öffne "
+                                       "eine neue oder antworte selbst.")),
+                (t("Fragen beantworten"), t("Fragt eine Session nach einer Freigabe, sag ja, nein "
+                                            "oder was stattdessen passieren soll.")),
+                (t("Den Überblick holen"), t("Frag mich einfach, was gerade los ist – kurz oder "
+                                             "ausführlich, wie du willst."))):
+            self.add_row(c, title, text, QWidget())
+        self.setup_body.addWidget(label(t("Alles Weitere findest du per Rechtsklick auf die Figur "
+                                          "→ Einstellungen, oder im Terminal mit walkie help."),
+                                        "help"))
+
+    def setup_page(self):
+        """card() erwartet eine Seite mit .lay – im Assistenten ist das der Schritt selbst."""
+        holder = QWidget()
+        holder.lay = self.setup_body
+        return holder
 
     def finish_welcome(self):
         try:
@@ -570,7 +695,16 @@ class SettingsWindow(QWidget):
             WELCOMED.write_text("1", encoding="utf-8")
         except OSError:
             pass
+        if self.needs_restart and self.walkie is not None:
+            self.restart_walkie()             # z. B. anderer Hauptagent
+            return
+        self.setup_mode = False
+        self.build_ui("general")              # nächstes Öffnen: die Einstellungen
         self.close()
+
+    def start_setup(self):
+        self.setup_mode, self.step = True, 0
+        self.build_ui()
 
     def page_general(self):
         pg = self.page(t("Allgemein"), t("Wer im Terminal arbeitet und wann der Begleiter startet."))
@@ -945,6 +1079,9 @@ class SettingsWindow(QWidget):
         b3.clicked.connect(self.restart_walkie)
         b3.setEnabled(self.walkie is not None)
         c.lay.addWidget(hbox(b1, b2, None, b3))
+        again = QPushButton(t("Einrichtung erneut durchlaufen"))
+        again.clicked.connect(self.start_setup)
+        c.lay.addWidget(hbox(again, None))
         c = self.card(pg, t("Im Terminal & in Claude"))
         c.lay.addWidget(label(t("Alle Einstellungen gehen auch ohne Fenster:\n"
                                 "  walkie settings          interaktives Menü\n"
@@ -1060,7 +1197,7 @@ def main():
     f = QFont(app.font())
     f.setPointSizeF(max(f.pointSizeF(), 10))
     app.setFont(f)
-    w = SettingsWindow()
+    w = SettingsWindow(setup=True if "--setup" in sys.argv else None)
     w.show()
     sys.exit(app.exec())
 
