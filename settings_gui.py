@@ -1115,6 +1115,24 @@ class SettingsWindow(QWidget):
         doctor = self.doctor
         Bg(run, lambda out: crashguard.alive(doctor) and doctor.setText(str(out)))
 
+    def showEvent(self, e):
+        """Immer ganz sichtbar: in den freien Bereich des Bildschirms einpassen (ohne Leisten
+        und Docks) und mittig setzen – sonst lagen „Weiter“ & Co. unter der Taskleiste."""
+        super().showEvent(e)
+        if getattr(self, "_placed", False):
+            return
+        self._placed = True
+        scr = self.screen() or QApplication.primaryScreen()
+        if scr is None:
+            return
+        avail = scr.availableGeometry()
+        w = min(self.width(), avail.width() - 40)
+        h = min(self.height(), avail.height() - 60)
+        self.resize(max(w, 600), max(h, 480))
+        frame = self.frameGeometry()
+        frame.moveCenter(avail.center())
+        self.move(max(avail.left(), frame.left()), max(avail.top(), frame.top()))
+
     def closeEvent(self, e):
         LEARN_FLAG.unlink(missing_ok=True)
         super().closeEvent(e)

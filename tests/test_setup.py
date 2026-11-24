@@ -77,6 +77,37 @@ class SetupTest(unittest.TestCase):
                 download.assert_not_called()
 
 
+class SetupReopensGuideTest(unittest.TestCase):
+    def test_setup_reopens_the_guided_setup_unless_headless(self):
+        import cli
+        for env, expect_guide in (({}, True), ({"WALKIE_NO_WELCOME": "1"}, False)):
+            marker = cli.RUN / "welcomed"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("1")
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                python = paths.venv_python(root / "venv")
+                python.parent.mkdir(parents=True)
+                python.touch()
+                run = lambda command, **_kw: SimpleNamespace(  # noqa: E731
+                    returncode=0, stdout='{"missing": [], "command": null}')
+                clean = {k: v for k, v in os.environ.items() if k != "WALKIE_NO_WELCOME"}
+                with patch.dict(os.environ, {**clean, "WALKIE_VENV": str(root / "venv"), **env},
+                                clear=True), \
+                        patch.object(cli, "install_dir", return_value=root), \
+                        patch.object(paths, "HERE", root), \
+                        patch("uvboot.ensure_uv", return_value="uv"), \
+                        patch("audio.build_mac_voicemic", return_value=False), \
+                        patch.object(cli, "install_launcher", return_value=None), \
+                        patch.object(cli, "choose_language", return_value=None), \
+                        patch.object(cli, "walkie_running", return_value=False), \
+                        patch.object(cli, "cmd_start", return_value=None), \
+                        patch.object(cli.subprocess, "run", side_effect=run), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    cli.cmd_setup(["--no-assets"])
+            self.assertEqual(not marker.exists(), expect_guide, env)
+
+
 class LauncherTest(unittest.TestCase):
     def test_launcher_points_to_installation_and_is_idempotent(self):
         import cli

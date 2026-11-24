@@ -811,6 +811,10 @@ def cmd_setup(args):
     if subprocess.run([str(py), str(root / "doctor.py"), "--allow-missing-agent"]).returncode:
         die("Einrichtung fehlgeschlagen. Die mit ✗ markierten Probleme oben beheben.")
     if "--no-start" not in args:
+        # `walkie setup` heißt: einrichten – der Assistent öffnet sich nach dem Start wieder,
+        # auch wenn er schon einmal abgeschlossen wurde (sonst sähe man nach setup nichts)
+        if not os.environ.get("WALKIE_NO_WELCOME"):
+            (RUN / "welcomed").unlink(missing_ok=True)
         if walkie_running():
             cmd_restart([])
         else:
