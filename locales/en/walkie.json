@@ -122,5 +122,8 @@
  "ändert das Datenbankschema": "changes the database schema",
  "löscht Docker-Daten": "deletes Docker data",
  "Bestätige {code}": "Confirm {code}",
- "Sag: Bestätige {code}. Oder nein.": "Say: confirm {code}. Or no."
+ "Sag: Bestätige {code}. Oder nein.": "Say: confirm {code}. Or no.",
+ "Terminal öffnen": "Open terminal",
+ "Das Terminal ist schon offen.": "The terminal is already open.",
+ "Kein Terminal gefunden. Bitte ein Terminalprogramm installieren.": "No terminal found. Please install a terminal app."
 }

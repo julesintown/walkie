@@ -251,6 +251,60 @@ class WalkieTest(unittest.TestCase):
         b.decide_newest("allow")
         self.assertEqual(written, [("r1", {"behavior": "allow"})])
 
+    def test_figure_comes_back_after_resolution_change_or_minimize(self):
+        from PyQt6.QtWidgets import QApplication
+        b = self.b
+        b.show()
+        g = QApplication.primaryScreen().geometry()
+        b.climb.mode = "wall"
+        b.move(g.right() + 600, g.bottom() + 600)          # alter, größerer Bildschirm
+        b.keep_on_screen()
+        self.assertTrue(g.contains(b.frameGeometry().center()))
+        self.assertEqual(b.climb.mode, "floor")
+        b.showMinimized()
+        self.app.processEvents()
+        b.keep_on_screen()
+        self.app.processEvents()
+        self.assertFalse(b.isMinimized(), "minimiert bliebe sie unerreichbar (nicht in der Taskleiste)")
+        self.assertTrue(b.isVisible())
+
+    def test_terminal_window_opens_raises_and_resumes(self):
+        import paths
+        import windows
+        b, ev = self.b, self.ev
+        (ev.RUN / b.TERMINAL_STATE).unlink(missing_ok=True)
+        opened = []
+
+        class Proc:
+            pid = 4321
+            alive = True
+            def poll(self): return None if self.alive else 0
+        proc = Proc()
+        with patch.object(ev, "PANEL", False), \
+                patch.object(b, "in_thread", lambda fn, *a: fn(*a)), \
+                patch.object(paths, "open_terminal",
+                             lambda argv, **k: opened.append((argv, k)) or proc), \
+                patch.object(windows, "raise_pid", return_value=True) as raised:
+            b.show_terminal()                                  # erstes Öffnen
+            argv, kw = opened[-1]
+            self.assertEqual(kw["env_extra"], {"WALKIE_IN_TERMINAL": "1"})
+            self.assertEqual(kw["cwd"], ev.new_session_dir(), "eigener Ordner, nie das Home")
+            self.assertNotEqual(kw["cwd"], str(Path.home()))
+            conv = b.terminal_state()["id"]
+            self.assertIn("--session-id", argv)               # Claude: feste ID
+            self.assertEqual(argv[-1], conv)
+            b.show_terminal()                                  # noch offen: nach vorne
+            if sys.platform.startswith("linux"):
+                self.assertEqual(len(opened), 1)
+                raised.assert_called_with(4321, log=ev.dbg)
+            proc.alive = False                                 # Fenster geschlossen
+            b.show_terminal()
+            self.assertEqual(opened[-1][0][-1], conv, "dasselbe Gespräch wieder")
+        b.remember_terminal_conversation({"terminal": True, "session": "neu-1", "agent": "claude"})
+        self.assertEqual(b.terminal_state()["id"], "neu-1")
+        b.remember_terminal_conversation({"session": "fremd", "agent": "claude"})
+        self.assertEqual(b.terminal_state()["id"], "neu-1", "nur Ereignisse aus dem Walkie-Terminal")
+
     def test_overview_question_goes_to_the_model_with_facts(self):
         """Ob kurz, eine Session oder Projektstand: das Modell entscheidet anhand der Frage."""
         import queue

@@ -21,6 +21,7 @@
   walkie sessions                 welche Claude-Sessions der Walkie gerade kennt
   walkie missed [--speak]         was habe ich verpasst? Überblick über alle Sessions
   walkie agents                   welcher Agent was mit dem Walkie kann
+  walkie terminal                 Hauptagent im Terminal öffnen (dasselbe Gespräch wie zuletzt)
   walkie start | stop | restart | status | gui
   walkie agent-guide              Anleitung für KI-Agents (Claude, Codex, Gemini …)
 
@@ -665,6 +666,15 @@ def cmd_sessions(_args):
               f"{dim((s.get('prompt') or '')[:60])}")
 
 
+def cmd_terminal(_args):
+    """Den Hauptagent im Standard-Terminal öffnen – oder nach vorne holen (dasselbe Gespräch)."""
+    if not bridge_ready():
+        cmd_start([])
+    if not bridge_post("/terminal"):
+        die("Der Walkie antwortet nicht: walkie doctor")
+    ok("Terminal geöffnet")
+
+
 def cmd_agents(_args):
     """Welcher Agent kann was mit dem Walkie (adapters.py)?"""
     import adapters
@@ -904,7 +914,8 @@ def installed():
 def cmd_default(_args):
     """`walkie` ohne alles: einrichten, falls nötig – sonst starten."""
     if bridge_ready():
-        ok("Walkie läuft schon. Einstellungen: walkie gui · Hilfe: walkie help")
+        bridge_post("/show")                  # läuft schon: Figur nach vorne holen
+        ok("Walkie läuft – die Figur ist wieder sichtbar. Einstellungen: walkie gui · Hilfe: walkie help")
         install_launcher(quiet=True)
         return
     if not installed():
@@ -1025,7 +1036,7 @@ COMMANDS = {
     "drafts": cmd_drafts,
     "settings": cmd_settings, "list": cmd_list, "get": cmd_get, "set": cmd_set,
     "reset": cmd_reset, "keys": cmd_keys, "voice": cmd_voice, "sprite": cmd_sprite,
-    "sessions": cmd_sessions, "missed": cmd_missed, "agents": cmd_agents, "setup": cmd_setup, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart, "status": cmd_status,
+    "sessions": cmd_sessions, "missed": cmd_missed, "agents": cmd_agents, "terminal": cmd_terminal, "setup": cmd_setup, "start": cmd_start, "stop": cmd_stop, "restart": cmd_restart, "status": cmd_status,
     "doctor": cmd_doctor, "gui": cmd_gui, "agent-guide": cmd_agent_guide,
 }
 

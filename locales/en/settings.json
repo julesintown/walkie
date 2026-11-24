@@ -54,7 +54,6 @@
  "Hotkey zum Reden": "Talk hotkey",
  "Höchstens (Sekunden)": "At most (seconds)",
  "Immer beim Walkie": "Always to the Walkie",
- "Ins eigene Terminal über der Figur (braucht kitty)": "To its own terminal above the figure (needs kitty)",
  "Keiner": "None",
  "Klettern & Fensterkanten": "Climbing & window edges",
  "Kommt nur zum Zug, wenn du ihn ausdrücklich ansprichst (z. B. „frag Codex …“): öffnet dafür eine neue Session. Nur Claude-Sessions kann der Begleiter danach vorlesen und weiter ansprechen.": "Only used when you address it explicitly (e.g. “ask Codex …”): opens a new session for it. The companion can only read aloud and keep talking to Claude sessions afterwards.",
@@ -125,5 +124,8 @@
  "Antigravity": "Antigravity",
  "Gemini": "Gemini",
  "Musik leiser beim Zuhören und Vorlesen (%)": "Lower music while listening and speaking (%)",
- "Andere Programme spielen so lange mit diesem Anteil ihrer Lautstärke weiter und danach wieder wie vorher. 100 = nicht leiser.": "Other apps keep playing at this share of their volume meanwhile and return to their previous volume afterwards. 100 = don’t lower."
+ "Andere Programme spielen so lange mit diesem Anteil ihrer Lautstärke weiter und danach wieder wie vorher. 100 = nicht leiser.": "Other apps keep playing at this share of their volume meanwhile and return to their previous volume afterwards. 100 = don’t lower.",
+ "Ins Panel-Terminal über der Figur (braucht kitty und das Panel)": "To the panel terminal above the figure (needs kitty and the panel)",
+ "Terminal als Panel über der Figur": "Terminal as a panel above the figure",
+ "Nur Linux mit kitty: ein randloses Terminal direkt über der Figur statt eines normalen Terminalfensters.": "Linux with kitty only: a borderless terminal right above the figure instead of a normal terminal window."
 }

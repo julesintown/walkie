@@ -379,6 +379,8 @@ def main():
 
     out = {"event": event, "ts": time.time(), "agent": agent, "own": own,
            "session": str(data.get("session_id") or ("own" if own else agent))}
+    if os.environ.get("WALKIE_IN_TERMINAL"):
+        out["terminal"] = True            # Terminalfenster des Walkies: Gespräch merken
     if agent == "codex" and data.get("turn_id"):
         out["turn_id"] = data["turn_id"]
     if data.get("reason"):

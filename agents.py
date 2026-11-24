@@ -88,6 +88,12 @@ class Agent:
         wenn der Agent das nicht kann."""
         return None
 
+    def terminal_command(self, conversation=None, resume=False):
+        """Kommandozeile fürs Terminalfenster des Walkies: eine ganz normale, interaktive
+        Session (Ereignisse kommen über Plugin bzw. globale Hooks). conversation = bekannte
+        Gesprächs-ID; resume = das Fenster war schon einmal offen -> dasselbe Gespräch."""
+        return self.command()
+
     @property
     def adapter(self):
         """Was der Walkie mit diesem Agent kann (adapters.py)."""
@@ -105,6 +111,14 @@ class Agent:
 class ClaudeCode(Agent):
     name, label = "claude", "Claude"
     hooks = ready_hook = dictation = True
+
+    def terminal_command(self, conversation=None, resume=False):
+        """Feste Session-ID: beim ersten Öffnen vergeben, danach fortgesetzt – sofern Claude
+        schon ein Transcript dazu hat (sonst gäbe --resume einen Fehler)."""
+        binary = os.environ.get("WALKIE_CLAUDE_BIN", "claude")
+        if conversation and resume and claude_transcript(conversation):
+            return [binary, "--resume", conversation]
+        return [binary, "--session-id", conversation] if conversation else [binary]
 
     def command(self):
         cfg = {"hooks": claude_hooks(HOOK[0], HOOK[1:])}
@@ -125,6 +139,12 @@ class Codex(Agent):
 
     def new_session(self, task):
         return [os.environ.get("WALKIE_CODEX_BIN", "codex"), task]
+
+    def terminal_command(self, conversation=None, resume=False):
+        binary = os.environ.get("WALKIE_CODEX_BIN", "codex")
+        if conversation:
+            return [binary, "resume", conversation]
+        return [binary, "resume", "--last"] if resume else [binary]
 
     def command(self):
         notify = json.dumps([*HOOK, "codex"])
@@ -219,6 +239,12 @@ class Antigravity(GlobalHooks):
     def new_session(self, task):
         return [self.binary(), "--prompt-interactive", task]
 
+    def terminal_command(self, conversation=None, resume=False):
+        self.install_hooks()
+        if conversation:
+            return [self.binary(), "--conversation", conversation]
+        return [self.binary(), "--continue"] if resume else [self.binary()]
+
     def command(self):
         self.install_hooks()
         return [self.binary()]
@@ -279,6 +305,15 @@ def shell_join(argv):
     if sys.platform == "win32":
         return subprocess.list2cmdline(argv)
     return " ".join(shlex.quote(p) for p in argv)
+
+
+def claude_transcript(session_id):
+    """Gibt es ein Claude-Code-Transcript zu dieser Session (also etwas zum Fortsetzen)?"""
+    base = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+    try:
+        return any(base.glob(f"*/{session_id}.jsonl"))
+    except OSError:
+        return False
 
 
 def write_json(path, data):

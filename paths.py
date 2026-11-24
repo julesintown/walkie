@@ -54,41 +54,118 @@ def launch(script, *args):
     return subprocess.Popen([python(gui=True), str(HERE / script), *args], **kw)
 
 
-def open_terminal(argv, cwd=None, title="Claude"):
-    """Programm in einem neuen, sichtbaren Terminalfenster starten (z. B. eine neue
-    Claude-Session). Linux: kitty/konsole/gnome-terminal/…, macOS: Terminal.app,
-    Windows: Windows Terminal, sonst cmd. Rückgabe: True, wenn ein Terminal gestartet wurde."""
+# Linux: wie ein Terminal ein Programm startet (Arbeitsordner, Befehl). Programme, die sonst in
+# einen schon laufenden Server übergeben und sofort enden, laufen hier bis zum Fensterschluss –
+# so weiß der Walkie, ob das Fenster noch offen ist.
+LINUX_TERMINALS = {
+    "konsole": lambda cwd, argv: ["--nofork", "--workdir", cwd, "-e", *argv],
+    "gnome-terminal": lambda cwd, argv: ["--wait", f"--working-directory={cwd}", "--", *argv],
+    "kgx": lambda cwd, argv: [f"--working-directory={cwd}", "--", *argv],
+    "ptyxis": lambda cwd, argv: ["--new-window", "--working-directory", cwd, "--", *argv],
+    "xfce4-terminal": lambda cwd, argv: ["--disable-server", f"--working-directory={cwd}",
+                                         "-x", *argv],
+    "mate-terminal": lambda cwd, argv: ["--disable-factory", f"--working-directory={cwd}",
+                                        "-x", *argv],
+    "tilix": lambda cwd, argv: ["-w", cwd, "-e", *argv],
+    "qterminal": lambda cwd, argv: ["-w", cwd, "-e", *argv],
+    "lxterminal": lambda cwd, argv: [f"--working-directory={cwd}", "-e", *argv],
+    "kitty": lambda cwd, argv: ["--directory", cwd, *argv],
+    "alacritty": lambda cwd, argv: ["--working-directory", cwd, "-e", *argv],
+    "wezterm": lambda cwd, argv: ["start", "--cwd", cwd, "--", *argv],
+    "foot": lambda cwd, argv: ["-D", cwd, *argv],
+    "ghostty": lambda cwd, argv: [f"--working-directory={cwd}", "-e", *argv],
+    "xterm": lambda cwd, argv: ["-e", *argv],
+}
+DESKTOP_TERMINALS = {"kde": ["konsole"], "gnome": ["ptyxis", "kgx", "gnome-terminal"],
+                     "xfce": ["xfce4-terminal"], "mate": ["mate-terminal"],
+                     "x-cinnamon": ["gnome-terminal"], "cinnamon": ["gnome-terminal"],
+                     "lxqt": ["qterminal"], "lxde": ["lxterminal"]}
+
+
+DESKTOP_PROCESSES = {"plasmashell": "kde", "gnome-shell": "gnome", "xfce4-session": "xfce",
+                     "xfwm4": "xfce", "mate-session": "mate", "cinnamon": "cinnamon",
+                     "lxqt-session": "lxqt", "lxsession": "lxde"}
+
+
+def running_desktop():
+    """Ohne XDG_CURRENT_DESKTOP (z. B. aus einer Shell ohne Desktop-Umgebung gestartet): die
+    Arbeitsumgebung an ihren laufenden Prozessen erkennen."""
+    names = set()
+    try:
+        for d in Path("/proc").iterdir():
+            if d.name.isdigit():
+                try:
+                    names.add((d / "comm").read_text(encoding="utf-8").strip())
+                except OSError:
+                    continue                    # Prozess gerade beendet
+    except OSError:
+        return []
+    return list(dict.fromkeys(v for k, v in DESKTOP_PROCESSES.items() if k in names))
+
+
+def linux_terminal(argv, cwd):
+    """Befehlszeile für das Standard-Terminal: $TERMINAL, xdg-terminal-exec, das Terminal der
+    Arbeitsumgebung (XDG_CURRENT_DESKTOP), x-terminal-emulator, dann bekannte Terminals."""
+    import shlex
+    import shutil
+    term = os.environ.get("TERMINAL", "").strip()
+    if term:
+        parts = shlex.split(term)
+        name = Path(parts[0]).name
+        if shutil.which(parts[0]):
+            how = LINUX_TERMINALS.get(name, lambda c, a: ["-e", *a])
+            return [*parts, *how(cwd, argv)]
+    if shutil.which("xdg-terminal-exec"):
+        return ["xdg-terminal-exec", *argv]
+    desktops = [d.strip().lower() for d in os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")
+                if d.strip()] or running_desktop()
+    candidates = [t for d in desktops for t in DESKTOP_TERMINALS.get(d, [])]
+    for name in candidates:
+        if shutil.which(name):
+            return [name, *LINUX_TERMINALS[name](cwd, argv)]
+    if shutil.which("x-terminal-emulator"):
+        target = Path(os.path.realpath(shutil.which("x-terminal-emulator"))).name
+        target = target.removesuffix(".wrapper")
+        how = LINUX_TERMINALS.get(target, lambda c, a: ["-e", *a])
+        return ["x-terminal-emulator", *how(cwd, argv)]
+    for name, how in LINUX_TERMINALS.items():
+        if shutil.which(name):
+            return [name, *how(cwd, argv)]
+    return None
+
+
+def open_terminal(argv, cwd=None, title="Claude", env_extra=None):
+    """Programm in einem neuen, sichtbaren Fenster des Standard-Terminals starten.
+    Linux: siehe linux_terminal(), macOS: Terminal.app, Windows: Windows Terminal, sonst cmd.
+    Rückgabe: der gestartete Prozess (wahr) oder None, wenn kein Terminal gefunden wurde.
+    Unter Linux endet der Prozess erst mit dem Fenster; Windows Terminal und Terminal.app
+    übergeben an ein laufendes Programm – dort sagt der Prozess nichts über das Fenster."""
     import shlex
     import shutil
     cwd = str(cwd or Path.home())
     env = clean_env()
     env.pop("WALKIE_SESSION", None)           # eine ganz normale, interaktive Session
+    env.update(env_extra or {})
     kw = {"cwd": cwd, "env": env, "stdin": subprocess.DEVNULL,
           "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if WIN:
         # npm-Shims (claude.cmd, codex.cmd, gemini.cmd) findet CreateProcess nicht ohne Endung
         argv = [shutil.which(argv[0]) or argv[0], *argv[1:]]
         if shutil.which("wt"):
-            cmd = ["wt", "-d", cwd, *argv]
+            cmd = ["wt", "--title", title, "-d", cwd, *argv]
         else:
             cmd = ["cmd", "/c", "start", title, "cmd", "/k", *argv]
-        subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, **kw)
-        return True
+        return subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, **kw)
     if sys.platform == "darwin":
-        script = f"cd {shlex.quote(cwd)} && {' '.join(shlex.quote(a) for a in argv)}"
-        subprocess.Popen(["osascript", "-e", 'tell application "Terminal" to activate',
-                          "-e", f'tell application "Terminal" to do script {json_str(script)}'],
-                         start_new_session=True, **kw)
-        return True
-    for prog, pre in (("kitty", ["--title", title, "--directory", cwd]),
-                      ("konsole", ["--workdir", cwd, "-e"]),
-                      ("gnome-terminal", [f"--working-directory={cwd}", "--"]),
-                      ("xfce4-terminal", [f"--working-directory={cwd}", "-x"]),
-                      ("x-terminal-emulator", ["-e"]), ("xterm", ["-e"])):
-        if shutil.which(prog):
-            subprocess.Popen([prog, *pre, *argv], start_new_session=True, **kw)
-            return True
-    return False
+        exports = "".join(f"export {k}={shlex.quote(v)}; " for k, v in (env_extra or {}).items())
+        script = f"cd {shlex.quote(cwd)} && {exports}{' '.join(shlex.quote(a) for a in argv)}"
+        return subprocess.Popen(["osascript", "-e", 'tell application "Terminal" to activate',
+                                 "-e", f'tell application "Terminal" to do script {json_str(script)}'],
+                                start_new_session=True, **kw)
+    cmd = linux_terminal(argv, cwd)
+    if cmd is None:
+        return None
+    return subprocess.Popen(cmd, start_new_session=True, **kw)
 
 
 def json_str(text):

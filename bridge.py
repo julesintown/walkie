@@ -46,6 +46,8 @@ class Bridge:
         self.httpd = None
         self.on_quit = None
         self.on_digest = None             # -> Text „Was habe ich verpasst?“ (GET /digest)
+        self.on_show = None               # Figur zeigen (POST /show)
+        self.on_terminal = None           # Terminalfenster des Agents (POST /terminal)
         self.saved = 0.0
         self._load()                   # vom Begleiter gesetzt: sauber beenden
 
@@ -112,6 +114,12 @@ class Bridge:
                     return self._reply(200, {"ok": True})
                 if path == "/ask":
                     return self._reply(200, bridge.ask(data))
+                if path == "/terminal" and bridge.on_terminal:
+                    bridge.on_terminal()
+                    return self._reply(200, {"ok": True})
+                if path == "/show" and bridge.on_show:
+                    bridge.on_show()
+                    return self._reply(200, {"ok": True})
                 if path == "/quit" and bridge.on_quit:
                     self._reply(200, {"ok": True})
                     return bridge.on_quit()

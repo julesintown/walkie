@@ -70,11 +70,11 @@ class SettingsTest(unittest.TestCase):
         from unittest.mock import patch
         for agent in ("claude", "codex", "gemini", "antigravity", "custom"):
             with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="auto"), \
-                    patch.object(S, "has_kitty", return_value=True):
+                    patch.object(S, "panel", return_value=True):
                 self.assertEqual(S.talk_terminal(), agent != "claude")
-            # Ohne kitty (Windows, WSL) gibt es kein eigenes Terminal: routen statt verlieren
-            with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="auto"), \
-                    patch.object(S, "has_kitty", return_value=False):
+            # Ohne Panel (Standard; Windows, WSL, ohne kitty): routen statt verlieren
+            with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="terminal"), \
+                    patch.object(S, "panel", return_value=False):
                 self.assertFalse(S.talk_terminal())
             with patch.dict(os.environ, WALKIE_AGENT=agent, WALKIE_TALK="route"):
                 self.assertFalse(S.talk_terminal())

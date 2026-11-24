@@ -173,11 +173,14 @@ SCHEMA = [
     Setting("WALKIE_SUMMARY", "choice", "claude", "ask", "Antworten zusammenfassen",
             "Lange Antworten in einem Satz (kostet ein paar hundert Tokens).",
             [("claude", "Mit KI zusammenfassen"), ("off", "Anfang vorlesen")]),
+    Setting("WALKIE_PANEL", "bool", False, "general", "Terminal als Panel über der Figur",
+            "Nur Linux mit kitty: ein randloses Terminal direkt über der Figur statt eines "
+            "normalen Terminalfensters.", restart=True, advanced=True),
     Setting("WALKIE_TALK", "choice", "auto", "ask", "Reden ohne offene Frage",
             "Wohin dein Satz geht, wenn gerade keine Frage offen ist.",
             [("auto", "Claude-Sessions oder das Terminal des gewählten Agents"),
              ("route", "An die passende Session – oder der Walkie antwortet selbst"),
-             ("terminal", "Ins eigene Terminal über der Figur (braucht kitty)")]),
+             ("terminal", "Ins Panel-Terminal über der Figur (braucht kitty und das Panel)")]),
     Setting("WALKIE_RAISE", "bool", False, "ask", "Fenster nach vorne holen, wenn eine Session fragt",
             "Holt das Terminal der fragenden Session in den Vordergrund. „Zeig mir das“ geht immer."),
     Setting("WALKIE_VOICE_REPLY", "bool", True, "ask", "Fragen am Ende einer Antwort per Stimme",
@@ -372,19 +375,21 @@ def voice_for_language(code, preferred=None):
 
 
 def has_kitty():
-    """Das eigene Terminal über der Figur ist ein kitty-Panel – das gibt es nur unter Linux
-    (und macOS), und nur, wenn kitty installiert ist."""
     import shutil
-    return sys.platform != "win32" and shutil.which("kitty") is not None
+    return sys.platform.startswith("linux") and shutil.which("kitty") is not None
+
+
+def panel():
+    """Terminal als kitty-Panel über der Figur? Nur auf ausdrücklichen Wunsch (WALKIE_PANEL)
+    und nur, wo es geht. Standard: ein normales Fenster des System-Terminals."""
+    return bool(get("WALKIE_PANEL")) and has_kitty()
 
 
 def talk_terminal():
-    """Geht Gesagtes ins eigene Terminal statt an die passende Session? „auto“ nimmt das
-    Terminal nur, wenn es eins gibt: ohne kitty (Windows, WSL, GNOME ohne kitty) würde jedes
-    Diktat sonst unzustellbar in den Entwürfen landen."""
+    """Geht Gesagtes ins eigene Panel-Terminal statt an die passende Session? Nur mit Panel –
+    ohne würde jedes Diktat unzustellbar in den Entwürfen landen."""
     mode = get("WALKIE_TALK")
-    return mode == "terminal" or (mode == "auto" and get("WALKIE_AGENT") != "claude"
-                                  and has_kitty())
+    return panel() and (mode == "terminal" or (mode == "auto" and get("WALKIE_AGENT") != "claude"))
 
 
 def overridden(key):

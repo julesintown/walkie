@@ -31,7 +31,7 @@ from pathlib import Path
 if sys.platform.startswith("linux") and os.environ.get("WAYLAND_DISPLAY"):
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
-from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
@@ -129,8 +129,9 @@ SYSTEM_PROMPT = (
 
 
 AGENT = make_agent(SYSTEM_PROMPT, STT_MODE)
-if not AGENT.dictation:
-    STT_MODE = "whisper"          # Agent ohne eigenes Diktat -> lokal transkribieren
+if not AGENT.dictation or not S.panel():
+    STT_MODE = "whisper"          # Claude-Diktat braucht das Panel-Terminal; sonst lokal (Whisper)
+PANEL = S.panel()                 # kitty-Panel über der Figur (nur auf Wunsch, Linux)
 AGENT_LABEL = AGENT.label
 LABELS = {"claude": "Claude", "codex": "Codex", "antigravity": "Antigravity", "gemini": "Gemini"}
 
@@ -250,12 +251,17 @@ class Terminal:
         self.lock = threading.Lock()
 
     def kitty(self, *args, stdin=None):
-        return subprocess.run(["kitty", "@", "--to", KITTY_SOCK, *args], input=stdin,
-                              text=True, capture_output=True, timeout=10)
+        try:
+            return subprocess.run(["kitty", "@", "--to", KITTY_SOCK, *args], input=stdin,
+                                  text=True, capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired) as ex:     # kein kitty: nie eine Exception
+            return subprocess.CompletedProcess(["kitty", *args], 127, "", str(ex))
 
     def running(self):
         if self.proc is not None and self.proc.poll() is None:
             return True
+        if not PANEL:
+            return False                     # ohne Panel gibt es kein Terminal über der Figur
         # Terminal von einem früheren Start noch offen? Dann übernehmen.
         if self.kitty("ls").returncode == 0:
             self.ready.set()
@@ -418,6 +424,8 @@ class Bus(QObject):
     mic_ready = pyqtSignal(object)   # Mikro umgeschaltet + Ton gespielt -> Aufnahme starten
     note = pyqtSignal(str)           # Hinweis (aus beliebigem Thread) -> Tray-Icon
     quit = pyqtSignal()              # `walkie stop` über die Brücke -> sauber beenden
+    show = pyqtSignal()              # `walkie` bei laufendem Walkie -> Figur zeigen
+    terminal = pyqtSignal()          # `walkie terminal` -> Terminalfenster des Agents
 
 
 LOG = RUN / "walkie.log"
@@ -769,8 +777,13 @@ class Walkie(QWidget):
         # Brücke zum Plugin-Mod jeder Claude-Session (lokaler HTTP-Dienst, plattformneutral)
         self.bridge = Bridge(str(RUN), ask_wait=lambda: S.get("WALKIE_ASK_WAIT"))
         self.bus.quit.connect(QApplication.instance().quit, Qt.ConnectionType.QueuedConnection)
+        self.bus.show.connect(lambda: (self.bring_back("walkie-befehl"), self.keep_on_screen()),
+                              Qt.ConnectionType.QueuedConnection)
         self.bridge.on_quit = self.bus.quit.emit
         self.bridge.on_digest = self.missed
+        self.bridge.on_show = self.bus.show.emit           # `walkie` bei laufendem Walkie
+        self.bridge.on_terminal = self.bus.terminal.emit   # `walkie terminal`
+        self.bus.terminal.connect(self.show_terminal, Qt.ConnectionType.QueuedConnection)
         self.look = (S.sprite_dir(), S.get("WALKIE_SCALE"))
         self.anim = Animator(SpriteSet(*self.look))
 
@@ -814,6 +827,7 @@ class Walkie(QWidget):
         self.ui_language = lang()
         self.settings_win = None
         QTimer(self, timeout=self.apply_settings).start(1000)
+        self.watch_screens()
         if not (RUN / "welcomed").exists() and not os.environ.get("WALKIE_NO_WELCOME"):
             # erster Start: Ersteinrichtung zeigen
             QTimer.singleShot(1500, self.open_settings)
@@ -1257,10 +1271,14 @@ class Walkie(QWidget):
 
     def contextMenuEvent(self, e):
         m = QMenu(self)
-        a_term = m.addAction(t("Terminal ausblenden") if self.term.visible
-                             else t("Terminal zeigen"))
-        a_close = m.addAction(t("Terminal schließen (Session beenden)"))
-        a_new = m.addAction(t("Neues Gespräch (/clear)"))
+        if PANEL:
+            a_term = m.addAction(t("Terminal ausblenden") if self.term.visible
+                                 else t("Terminal zeigen"))
+            a_close = m.addAction(t("Terminal schließen (Session beenden)"))
+            a_new = m.addAction(t("Neues Gespräch (/clear)"))
+        else:
+            a_term = m.addAction(t("Terminal öffnen"))
+            a_close = a_new = None
         a_stop = m.addAction(t("Sprechen stoppen"))
         m.addSeparator()
         a_voice = QAction(t("Antworten vorlesen"), m, checkable=True, checked=self.voice_on)
@@ -1290,8 +1308,10 @@ class Walkie(QWidget):
         a_settings = m.addAction(t("Einstellungen …"))
         a_quit = m.addAction(t("Beenden"))
         act = m.exec(e.globalPos())
+        if act is None:
+            return
         if act == a_term:
-            self.toggle_terminal()
+            self.show_terminal()
         elif act == a_close:
             self.term.visible = False
             self.in_thread(self.term.close)
@@ -1420,8 +1440,85 @@ class Walkie(QWidget):
         self.tray.show()
 
     def has_terminal(self):
-        """Eigenes Terminal über der Figur (das Gespräch mit dem Walkie selbst): braucht kitty."""
-        return shutil.which("kitty") is not None
+        """Panel-Terminal über der Figur (nur mit WALKIE_PANEL und kitty)."""
+        return PANEL
+
+    # ---------------- Terminalfenster (Standard) ----------------
+    TERMINAL_STATE = "terminal.json"
+
+    def terminal_state(self):
+        try:
+            st = json.loads((RUN / self.TERMINAL_STATE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            st = {}
+        if st.get("agent") != AGENT.name:      # anderer Hauptagent: neues Gespräch
+            st = {"agent": AGENT.name}
+        return st
+
+    def save_terminal_state(self, st):
+        try:
+            RUN.mkdir(parents=True, exist_ok=True)
+            (RUN / self.TERMINAL_STATE).write_text(json.dumps(st), encoding="utf-8")
+        except OSError:
+            pass
+
+    def show_terminal(self):
+        """„Terminal anzeigen“: der Hauptagent in einem normalen Fenster des Standard-
+        Terminals. Ist es offen, kommt es nach vorne; sonst öffnet es sich mit demselben
+        Gespräch wie beim letzten Mal."""
+        if PANEL:
+            self.toggle_terminal()
+            return
+        self.in_thread(self._show_terminal)
+
+    def _show_terminal(self):
+        import paths
+        import windows
+        st = self.terminal_state()
+        cwd = st.get("cwd") if st.get("cwd") and Path(st["cwd"]).is_dir() else None
+        if st.get("opened") and cwd is None:
+            st = {"agent": AGENT.name}           # alter Stand ohne eigenen Ordner: neu beginnen
+        cwd = cwd or new_session_dir()
+        conv = st.get("id")
+        if AGENT.name == "claude":
+            conv = conv or str(uuid.uuid4())
+            s = self.bridge.active_sessions().get(conv)
+            if s and s.get("pid") and windows.raise_pid(s["pid"], log=dbg):
+                return
+        proc = getattr(self, "agent_term", None)
+        if proc is not None and proc.poll() is None and not paths.WIN \
+                and sys.platform != "darwin":   # Linux: Prozess lebt so lange wie das Fenster
+            if not windows.raise_pid(proc.pid, log=dbg):
+                notify(t("Das Terminal ist schon offen."))
+            return
+        try:
+            argv = AGENT.terminal_command(conv, resume=bool(st.get("opened")))
+        except RuntimeError as ex:
+            notify(t("Huch, Fehler: {ex}", ex=ex))
+            return
+        # eigener Ordner (wie neue Sessions), nie das Home-Verzeichnis: dort fragt Claude bei
+        # jedem Start nach Freigaben. Fortsetzen geht nur im selben Ordner -> mit gemerkt.
+        dbg(f"terminal in {cwd}: {' '.join(argv)}")
+        proc = paths.open_terminal(argv, cwd=cwd,
+                                   title=f"{WALKIE_NAME} · {AGENT_LABEL}",
+                                   env_extra={"WALKIE_IN_TERMINAL": "1"})
+        if not proc:
+            notify(t("Kein Terminal gefunden. Bitte ein Terminalprogramm installieren."))
+            return
+        self.agent_term = proc
+        st.update(opened=True, id=conv, cwd=cwd)
+        self.save_terminal_state(st)
+
+    def remember_terminal_conversation(self, ev):
+        """Ein Ereignis aus dem Terminalfenster des Walkies (Hook mit WALKIE_IN_TERMINAL):
+        dessen Gesprächs-ID merken, damit das nächste Öffnen genau dort weitermacht."""
+        sid = ev.get("session")
+        if not ev.get("terminal") or not sid or ev.get("agent") not in (AGENT.name, None):
+            return
+        st = self.terminal_state()
+        if st.get("id") != sid:
+            st["id"] = sid
+            self.save_terminal_state(st)
 
     def on_click(self):
         """Klick: mit eigenem Terminal (kitty) dieses ein-/ausblenden, sonst wie die
@@ -1444,9 +1541,65 @@ class Walkie(QWidget):
     announce_on = property(lambda self: S.get("WALKIE_ANNOUNCE"),
                            lambda self, v: S.set("WALKIE_ANNOUNCE", bool(v)))
 
+    def keep_on_screen(self):
+        """Die Figur muss sichtbar sein: Nach einem Wechsel von Auflösung oder Monitoren
+        (RDP neu verbunden, Monitor abgezogen, Dock) stand sie sonst außerhalb – der Prozess
+        lief, aber man sah nichts. Liegt weniger als ein Drittel des Fensters auf einem
+        Bildschirm, landet sie wieder unten rechts auf dem Boden."""
+        if self.drag_off is not None:
+            return
+        if self.isMinimized() or not self.isVisible():
+            self.bring_back("versteckt/minimiert")
+            return
+        me = self.frameGeometry()
+        area = me.width() * me.height() or 1
+        seen = 0
+        for scr in QApplication.screens():
+            r = me.intersected(scr.geometry())
+            seen += max(0, r.width()) * max(0, r.height())
+        if seen * 3 >= area:
+            return
+        g = QApplication.primaryScreen().geometry()
+        dbg(f"figur außerhalb des Bildschirms ({me.x()}, {me.y()}) – zurück nach unten rechts")
+        self.climb.to_floor()
+        self.target_x = self.climb_to = None
+        self.rot = 0
+        self.move(g.right() - self.SIZE - 60, g.bottom() - self.SIZE + 6)
+        self.update()
+
+    def bring_back(self, why=""):
+        """Figur wieder zeigen: Manche Fenstermanager (z. B. xfwm4) minimieren sie zusammen mit
+        dem Einstellungsfenster oder bei „Desktop anzeigen“. Sie steht nicht in der Taskleiste –
+        man käme nie wieder an sie heran, während der Prozess weiterläuft."""
+        if why:
+            dbg(f"figur zurückgeholt ({why})")
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.show()
+        self.raise_()
+
+    def changeEvent(self, e):
+        if e.type() == QEvent.Type.WindowStateChange and self.isMinimized():
+            QTimer.singleShot(0, lambda: self.bring_back("minimiert"))
+        super().changeEvent(e)
+
+    def watch_screens(self):
+        """Auflösung/Monitore geändert: sofort (kurz verzögert) prüfen, nicht erst beim Laufen."""
+        app = QApplication.instance()
+        later = lambda *_: QTimer.singleShot(400, self.keep_on_screen)  # noqa: E731
+
+        def track(scr):
+            scr.geometryChanged.connect(later)
+            scr.availableGeometryChanged.connect(later)
+        for scr in app.screens():
+            track(scr)
+        app.screenAdded.connect(lambda scr: (track(scr), later()))
+        app.screenRemoved.connect(later)
+        app.primaryScreenChanged.connect(later)
+
     def apply_settings(self):
         """Läuft jede Sekunde: geänderte Einstellungen sofort übernehmen (+ Wächter)."""
         self.watchdog()
+        self.keep_on_screen()
         look = (S.sprite_dir(), S.get("WALKIE_SCALE"))
         if look != self.look:
             try:
@@ -1500,7 +1653,7 @@ class Walkie(QWidget):
             self.clear_announcements()
             self.stop_speaking()
         elif action == "terminal":
-            self.toggle_terminal()
+            self.show_terminal()
         elif action == "show":
             self.in_thread(beep, "click")
             self.in_thread(self.raise_session, self.current_session())
@@ -2034,6 +2187,7 @@ class Walkie(QWidget):
             return
         label = LABELS.get(ev.get("agent"), "Der Agent")
         self.timeline.add(ev)
+        self.remember_terminal_conversation(ev)
         dbg(f"ereignis {kind} {ev.get('project') or sid}"
             + (f" req={ev['req']}" if ev.get("req") else ""))
         if kind != "attention" or not ev.get("req"):

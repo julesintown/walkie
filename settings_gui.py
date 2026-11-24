@@ -718,6 +718,8 @@ class SettingsWindow(QWidget):
         self.setting_row(c, "WALKIE_AGENT_CMD")
         self.setting_row(c, "WALKIE_AGENT_2")
         self.setting_row(c, "WALKIE_WORKDIR")
+        if sys.platform.startswith("linux"):
+            self.setting_row(c, "WALKIE_PANEL")
         self.setting_row(c, "WALKIE_SESSION_DIR")
         c = self.card(pg, t("Start"))
         self.setting_row(c, "WALKIE_LOGIN_AUTOSTART")
