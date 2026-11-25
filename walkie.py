@@ -1998,8 +1998,11 @@ class Walkie(QWidget):
                 self.mic_device = self.headset_audio.prepare(self.mic_owner, self.mic_device, HEADSET_NAME)
             elif not self.mic_device:
                 self.mic_device = headset_mic()
-            dbg(f"mikro: {self.mic_device or 'Standard'}"
-                + ("" if self.mic_device else f" ({audio.default_input_name() or '?'})"))
+            if self.mic_device:
+                dbg(f"mikro: {self.mic_device}")
+            else:                                  # Name nur fürs Log: pactl hängt manchmal bis
+                self.in_thread(lambda: dbg(        # zu 3 s – nie den Aufnahmestart aufhalten
+                    f"mikro: Standard ({audio.default_input_name() or '?'})"))
             # Bluetooth-Telefonmodus: Die Verbindung braucht nach dem Umschalten und nach dem
             # Aufnahmestart ~0,8 s; ein Ton in dieser Zeit geht verloren, und das Mikro ist taub.
             # Dann piept es erst, wenn das Mikro wirklich hört (_beep_when_live).

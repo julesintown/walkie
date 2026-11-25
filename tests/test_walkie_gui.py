@@ -842,6 +842,9 @@ class WalkieTest(unittest.TestCase):
         b.headset_audio.prepare = b.headset_audio.release = ev.beep = lambda *a, **k: None
         ev.transcribe = lambda model, wav, hint=None: "Ja, mach weiter"
         ev.router.understand = lambda text, sessions, **k: ("session", "S", text)
+        # Fenster nach vorne holen fragt sonst die echte Fensterliste ab (X11/xrdp: bis zu 4 s,
+        # hält dabei die anderen Threads auf) – der Test brach dann je nach Last zufällig ab
+        b.raise_session = lambda *a, **k: None
         b.bridge.on_event({"event": "ready", "session": "S", "project": "soak"})
 
         def pump(cond, limit=3.0):
@@ -866,7 +869,9 @@ class WalkieTest(unittest.TestCase):
                 if b.state == "listening":
                     b.stop_listening()                   # zweiter Druck
                 self.assertTrue(pump(lambda: b.state == "idle", 3),
-                                f"Runde {i}: hängt in {b.state}")
+                                f"Runde {i}: hängt in {b.state} DIAG rec={b.rec_proc!r} "
+                                f"owner={b.mic_owner!r} answer={b.answer_req!r} "
+                                f"pending={list(b.pending)} timer={b.level_timer.isActive()}")
             self.assertEqual(b.state, "idle")
             self.assertIsNone(b.rec_proc)
             self.assertEqual(b.pending, {}, "Anfragen liegen geblieben")
