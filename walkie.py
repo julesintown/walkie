@@ -72,7 +72,9 @@ WANDER_EVERY_MS = 12000
 ACTION_CHANCE = 0.15
 MIC_DEAD = 0.002                     # darunter liefert das Mikro praktisch nur Nullen
 QUIET_PEAK = 0.008                   # absoluter Ersatz, wenn die adaptive Erkennung nichts meldet
-VOICE_CONTRAST = 8                   # lautestes / leisestes Zehntel der Aufnahme: ab hier ist Sprache drin
+DIGITAL_SILENCE = 1e-4               # darunter: Nullen vom Gerät, kein echtes Grundrauschen
+VOICE_OF_PEAK = 0.05                 # Sprechen = mind. dieser Anteil der lautesten Stelle bisher
+VOICE_CONTRAST = 8                # lautestes / leisestes Zehntel der Aufnahme: ab hier ist Sprache drin
 CLIMB_CHANCE = 0.12                  # je Wander-Runde: zur Bildschirmkante laufen und hochklettern
 LINUX = sys.platform.startswith("linux")   # Bluetooth-Profil, MPRIS, evdev: nur Linux
 OKAY_TAIL = 1.5                      # s: Kopfhörer spielt das „Okay“ verzögert aus
@@ -2151,16 +2153,23 @@ class Walkie(QWidget):
             a = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768
             rms = float(np.sqrt(np.mean(a * a)))
             self.max_rms = max(getattr(self, "max_rms", 0.0), rms)
-            if self.noise is None or (time.time() - self.rec_start < 0.6 and rms < self.noise):
-                self.noise = rms            # Grundrauschen aus dem ersten Moment
-            if rms > max(0.012, self.noise * 4):
+            # Grundrauschen aus dem ersten Moment – ohne digitale Stille: Laptop-Mikros (Windows)
+            # liefern beim Öffnen erst Nullen; als „Rauschen“ genommen zählte danach jedes
+            # Raumgeräusch als Sprechen, und die Aufnahme endete nie von selbst
+            if rms >= DIGITAL_SILENCE and (self.noise is None or (
+                    time.time() - self.rec_start < 0.85 and rms < self.noise)):
+                self.noise = rms
+            if rms > max(0.012, (self.noise or 0.0) * 4):
                 self.last_voice = time.time()
         if self.answer_req:
             # mindestens WINDOW s; solange gesprochen wird (relativ zum Grundrauschen, weil
             # Headset-Mikros leise sind) bis MAX s verlängern
             # Mindestschwelle nur gegen digitale Stille (Nullen): 0.0015 lag bei einem leisen
             # Mikro (RDP) über der Sprache selbst, und die Aufnahme brach mitten im Satz ab
-            if data and self.noise is not None and rms > max(0.0003, self.noise * 2.5):
+            # … und relativ zur lautesten Stelle bisher: Tippen, Lüfter oder leise weiterlaufende
+            # Musik (Laptop-Lautsprecher ins Laptop-Mikro) halten das Mikro sonst endlos offen
+            if data and self.noise is not None and \
+                    rms > max(0.0003, self.noise * 2.5, self.max_rms * VOICE_OF_PEAK):
                 self.answer_voice = time.time()
             now = time.time()
             window, most = S.get("WALKIE_ANSWER_WINDOW"), S.get("WALKIE_ANSWER_MAX")

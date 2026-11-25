@@ -1298,6 +1298,40 @@ class WalkieTest(unittest.TestCase):
         b.rec_proc = None
         b.answer_req = None
 
+    def test_laptop_mic_room_noise_does_not_keep_talk_open(self):
+        """Laptop-Mikro (Windows): erst Nullen, dann Raumrauschen. Die Nullen sind kein
+        Grundrauschen, und leise Geräusche nach dem Sprechen halten das Mikro nicht offen."""
+        import struct
+        import time
+        from unittest.mock import Mock
+        b, ev = self.b, self.ev
+        b.rec_proc = Mock()
+        b.rec_file = str(TMP / "laptop.wav")
+        Path(b.rec_file).write_bytes(b"")
+        b.answer_req, b.silence_limit = ev.TALK, ev.HEADSET_SILENCE
+        b.rec_start, b.rec_pos, b.noise, b.max_rms = time.time(), 0, None, 0.0
+        b.answer_voice = 0.0
+        b.stop_listening = Mock()
+
+        def chunk(level):
+            with open(b.rec_file, "ab") as f:
+                f.write(struct.pack("<400h", *[level] * 400))
+            b.check_silence()
+
+        chunk(0)                                     # Gerät öffnet: digitale Stille
+        self.assertIsNone(b.noise)
+        chunk(40)                                    # Raum: ~0.0012
+        self.assertAlmostEqual(b.noise, 40 / 32768, places=6)
+        chunk(3000)                                  # Sprechen
+        spoke = b.answer_voice
+        self.assertGreater(spoke, 0)
+        b.rec_start -= 10                            # Kalibrierung vorbei, länger am Reden
+        b.answer_voice = spoke - 1
+        chunk(120)                                   # Tippen/Lüfter: > 2.5× Rauschen, aber leise
+        self.assertEqual(b.answer_voice, spoke - 1)
+        b.rec_proc = None
+        b.answer_req = None
+
     def test_reply_to_session_question_is_not_cut_at_answer_max(self):
         """Frei formulierte Antwort auf eine Frage: läuft, solange gesprochen wird. Freigaben
         bleiben bei WALKIE_ANSWER_MAX (20 s brachen lange Antworten mitten im Satz ab)."""
