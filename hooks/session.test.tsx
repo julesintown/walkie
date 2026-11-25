@@ -174,7 +174,7 @@ test('WSL ohne eigenen Walkie: meldet sich beim Walkie auf Windows', async ($, o
       if (path.startsWith('/mnt/c/')) return { value: JSON.stringify({ port: 5050, token: 'win' }) }
       throw new Error('ENOENT')               // in WSL läuft kein Walkie
     },
-    'process.run': () => ({ value: { exitCode: 0, stdout: '/mnt/c/Users/X\n', stderr: '' } }),
+    'fs.list': () => ({ value: ['Public', 'Default', 'X'] }),   // C:\\Users ohne cmd.exe
   })
   await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: true })
   expect(fetched[0]?.url).toBe('http://127.0.0.1:5050/event')

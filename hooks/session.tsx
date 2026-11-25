@@ -45,30 +45,33 @@ async function runDir($: EngineInterface): Promise<string> {
   return `${state}/walkie`
 }
 
-let windowsRun: Promise<string | undefined> | undefined
+let windowsRun: Promise<string[]> | undefined
 
-/** Nur unter WSL: Statusordner eines Walkies, der auf Windows läuft
- *  (C:\Users\<du>\.local\state\walkie, als /mnt/c/…). WALKIE_WINDOWS_RUN überschreibt die
- *  Suche. Wird einmal pro Session ermittelt. Erreichbar ist dieser Walkie aus WSL nur mit
- *  networkingMode=mirrored in der .wslconfig (sonst ist 127.0.0.1 nicht der Windows-Rechner). */
-async function windowsRunDir($: EngineInterface): Promise<string | undefined> {
+const NOT_PEOPLE = new Set(['all users', 'default', 'default user', 'public', 'desktop.ini'])
+
+/** Nur unter WSL: Statusordner, in denen ein Walkie auf Windows seine server.json ablegt
+ *  (C:\Users\<du>\.local\state\walkie, als /mnt/c/Users/<du>/…). WALKIE_WINDOWS_RUN
+ *  überschreibt die Suche. Direkt im Dateisystem gesucht, ohne cmd.exe: Claude-Prozessen aus
+ *  einem xrdp-Desktop fehlt die WSL-Interop, dort scheiterte cmd.exe still. Einmal pro
+ *  Session. Erreichbar ist dieser Walkie aus WSL nur mit networkingMode=mirrored. */
+async function windowsRunDirs($: EngineInterface): Promise<string[]> {
   const own = await $.env.get('WALKIE_WINDOWS_RUN')
-  if (own) return own
+  if (own) return [own]
   windowsRun ??= (async () => {
     try {
       // WSL: Variable der WSL-Shell (fehlt z. B. im xrdp-Desktop) oder Kennung des WSL-Kernels.
       // Auf macOS/Windows gibt es die Datei nicht -> kein WSL, nichts weiter.
       const wsl = Boolean(await $.env.get('WSL_DISTRO_NAME')) ||
         /microsoft/i.test(await $.fs.read('/proc/sys/kernel/osrelease').catch(() => ''))
-      if (!wsl) return undefined
-      // cmd.exe liegt nicht immer im PATH (appendWindowsPath=false)
-      const r = await $.process.run(['sh', '-c',
-        'p=$( (cmd.exe /c "echo %USERPROFILE%" || /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%")' +
-        ' 2>/dev/null | tr -d "\\r"); [ -n "$p" ] && wslpath -u "$p"'], { timeoutMs: 8000 })
-      const home = r.stdout.trim()
-      return home ? `${home}/.local/state/walkie` : undefined
+      if (!wsl) return []
+      const entries = (await $.fs.list('/mnt/c/Users')) as unknown[]
+      return entries
+        .map(e => (typeof e === 'string' ? e : String((e as { name?: unknown })?.name ?? '')))
+        .map(name => name.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? '')
+        .filter(name => name && !NOT_PEOPLE.has(name.toLowerCase()))
+        .map(name => `/mnt/c/Users/${name}/.local/state/walkie`)
     } catch {
-      return undefined
+      return []
     }
   })()
   return windowsRun
@@ -89,7 +92,13 @@ async function readServer($: EngineInterface, dir: string | undefined,
 /** Adresse der laufenden App – undefined, wenn sie nicht läuft. Unter WSL ohne eigenen Walkie
  *  auch der Walkie auf Windows; überall sonst nur der eigene Statusordner. */
 async function server($: EngineInterface): Promise<Server | undefined> {
-  return (await readServer($, await runDir($))) ?? (await readServer($, await windowsRunDir($), true))
+  const own = await readServer($, await runDir($))
+  if (own) return own
+  for (const dir of await windowsRunDirs($)) {
+    const s = await readServer($, dir, true)
+    if (s) return s
+  }
+  return undefined
 }
 
 const CALL_TIMEOUT_MS = 5000
