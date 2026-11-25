@@ -57,24 +57,29 @@ class BrainOrder(unittest.TestCase):
         self.assertIn("-p", calls[-1])
 
     def test_menu_choice_claude_in_wsl(self):
-        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="claude-wsl"), \
+        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_AGENT_2="antigravity",
+                        WALKIE_BRAIN="claude-wsl"), \
                 patch("shutil.which", which_only("claude", "agy")), \
                 patch.object(router, "wsl_claude_ok", return_value=True):
-            self.assertEqual(router.brains(), ["claude-wsl"])
-        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="claude"), \
-                patch("shutil.which", which_only("claude", "agy")), \
-                patch.object(router, "wsl_claude_ok", return_value=True):
-            self.assertEqual(router.brains(), ["claude"])          # „Claude“ = nur Windows-Claude
+            # gewählt zuerst, dann der Zweitagent als Ersatz (z. B. bei Nutzungslimit)
+            self.assertEqual(router.brains(), ["claude-wsl", "antigravity", "claude"])
 
     def test_no_wsl_probe_outside_windows(self):
         with patch.object(router, "_wsl_claude", None), \
                 patch.object(router, "_run", side_effect=AssertionError("nichts starten")):
             self.assertFalse(router.wsl_claude_ok())
 
-    def test_explicit_brain_only(self):
+    def test_chosen_brain_first_others_stay_fallback(self):
         with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="codex"), \
                 patch("shutil.which", which_only("claude", "codex")):
-            self.assertEqual(router.brains(), ["codex"])
+            self.assertEqual(router.brains(), ["codex", "claude"])
+
+    def test_second_agent_is_first_fallback(self):
+        """Nutzungslimit beim Hauptmodell: gleich der Zweitagent, nicht irgendein anderer."""
+        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_AGENT_2="antigravity",
+                        WALKIE_BRAIN="auto"), \
+                patch("shutil.which", which_only("claude", "codex", "agy")):
+            self.assertEqual(router.brains(), ["claude", "antigravity", "codex"])
 
     def test_print_mode_passes_prompt_as_argument_and_silences_hooks(self):
         seen = {}

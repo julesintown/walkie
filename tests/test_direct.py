@@ -96,7 +96,7 @@ class BrainTest(unittest.TestCase):
         self.assertEqual(self.brains("auto", "codex", {"codex", "claude"}), ["codex", "claude"])
         self.assertEqual(self.brains("auto", "claude", {"codex", "claude"}), ["claude", "codex"])
         self.assertEqual(self.brains("auto", "gemini", {"codex"}), ["codex"])
-        self.assertEqual(self.brains("codex", "claude", {"codex", "claude"}), ["codex"])
+        self.assertEqual(self.brains("codex", "claude", {"codex", "claude"}), ["codex", "claude"])   # gewählt zuerst, Rest als Ersatz
         self.assertEqual(self.brains("auto", "claude", set()), [])
 
     def test_falls_back_when_the_first_brain_fails(self):

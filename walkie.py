@@ -1905,7 +1905,18 @@ class Walkie(QWidget):
         fd, self.rec_file = tempfile.mkstemp(suffix=".wav", prefix="walkie-")
         os.close(fd)
         rec = audio.Recorder()
-        if not rec.start(self.rec_file, getattr(self, "mic_device", None) or S.get("WALKIE_MIC") or None):
+        device = getattr(self, "mic_device", None) or S.get("WALKIE_MIC") or None
+        ok = rec.start(self.rec_file, device)
+        if not ok and device:
+            # gewähltes Mikro fehlt (Kopfhörer getrennt): lieber das Standardmikro des Systems
+            # als gar keins – beim nächsten Mal wieder das gewählte, sobald es da ist
+            dbg(f"mikro: {rec.error} – nehme das Standardmikrofon")
+            rec = audio.Recorder()
+            ok = rec.start(self.rec_file, None)
+            if ok and getattr(self, "mic_fallback_told", None) != device:
+                self.mic_fallback_told = device
+                notify(t("{mic} ist nicht da – ich nehme das Standardmikrofon.", mic=device))
+        if not ok:
             Path(self.rec_file).unlink(missing_ok=True)
             dbg(f"mikro: {rec.error}")
             notify(t("Mikrofon lässt sich nicht öffnen ({error}) 😕", error=rec.error))

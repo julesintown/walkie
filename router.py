@@ -278,21 +278,26 @@ def brains(env=None):
     import settings
     pref = settings.get("WALKIE_BRAIN")
     agent = settings.get("WALKIE_AGENT")
-    if pref == "claude-wsl" and wsl_claude_ok():
-        return ["claude-wsl"]                 # im Menü gewählt (sonst wie „Automatisch“)
+    second = settings.get("WALKIE_AGENT_2")
     order = ["claude", "codex", "antigravity", "gemini"]
-    first = pref if pref in BRAIN_BINS else agent if agent in BRAIN_BINS else None
+    first = agent if agent in BRAIN_BINS else None
     if first:
         order.remove(first)
         order.insert(0, first)
-        if pref in BRAIN_BINS:
-            order = [pref]
     path = (env or os.environ).get("PATH")
     found = [b for b in order if shutil.which(brain_bin(b), path=path)]
-    if pref not in BRAIN_BINS and wsl_claude_ok():
+    if wsl_claude_ok():
         # Windows: das Claude Code aus WSL, gleich nach einem Windows-Claude (das oft fehlt
         # oder nicht angemeldet ist) und vor den langsameren anderen
         found.insert(found.index("claude") + 1 if "claude" in found else 0, "claude-wsl")
+    # Im Menü gewählt: zuerst dieses – die anderen bleiben Ersatz, wenn es ausfällt
+    if pref in found:
+        found.remove(pref)
+        found.insert(0, pref)
+    # Zweitagent gleich als erster Ersatz (z. B. wenn beim ersten das Nutzungslimit erreicht ist)
+    if second in found[1:]:
+        found.remove(second)
+        found.insert(1, second)
     return found
 
 

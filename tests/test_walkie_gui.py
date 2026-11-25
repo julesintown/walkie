@@ -1072,6 +1072,38 @@ class WalkieTest(unittest.TestCase):
         b.check_silence()
         b.stop_listening.assert_called_once()
 
+    def test_missing_chosen_mic_falls_back_to_default(self):
+        """Gewähltes Mikro weg (Kopfhörer getrennt): Standardmikro statt Fehlermeldung, Hinweis
+        nur einmal je Gerät."""
+        from unittest.mock import patch
+        b, ev = self.b, self.ev
+        tried = []
+
+        class Rec:
+            error = ""
+            def start(self, path, device=None):
+                tried.append(device)
+                if device:
+                    self.error = f"Mikrofon nicht gefunden: {device}"
+                    return False
+                return True
+            def alive(self): return True
+            def stop(self): pass
+        notes = []
+        with patch.object(ev.audio, "Recorder", Rec), patch.object(ev, "notify", notes.append):
+            b.mic_device = "Headset (Test)"
+            b.whisper = object()
+            b.start_listening(answer=ev.TALK, prepared=True)
+            self.assertEqual(tried, ["Headset (Test)", None])
+            self.assertEqual(b.state, "listening")
+            b.stop_listening()
+            b.rec_proc = None
+            b.set_state("idle")
+            b.start_listening(answer=ev.TALK, prepared=True)
+        self.assertEqual(len(notes), 1)
+        b.rec_proc = None
+        b.set_state("idle")
+
     def test_read_aloud_answer_is_router_context_not_a_rule(self):
         """Was vorgelesen wurde, bekommt der Router als Kontext; wen der Nutzer zuletzt
         angesprochen hat, bleibt unverändert (entscheiden soll das Modell)."""
