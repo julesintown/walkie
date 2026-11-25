@@ -218,3 +218,14 @@ test('Walkie startet nach der Session: sie meldet sich bei der nächsten Meldung
   expect(bodies(fetched, '/event').map(b => b.event)).toEqual(['ready', 'tool'])
   expect(bodies(fetched, '/event')[0]).toMatchObject({ session: 'S1', project: 'shop', cwd: '/home/x/shop' })
 })
+
+test('Walkie antwortet nicht: der Sessionstart hängt nicht und der Abruf-Takt läuft', async ($, on) => {
+  let ticking = false
+  engine(on, {}, {
+    'http.fetch': () => new Promise(() => undefined),     // Port offen, aber keine Antwort
+    'clock.sleep': () => ({ value: undefined }),           // Zeitgrenze sofort erreicht
+    'clock.every': () => { ticking = true; return { value: { cancel: () => undefined } } },
+  })
+  await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: true })
+  expect(ticking).toBe(true)
+})

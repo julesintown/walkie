@@ -91,15 +91,33 @@ async function server($: EngineInterface): Promise<Server | undefined> {
   return (await readServer($, await runDir($))) ?? (await readServer($, await windowsRunDir($), true))
 }
 
+const CALL_TIMEOUT_MS = 5000
+
+/** Wartet ms, dann TIMEOUT. Lehnt die Engine die Uhr ab (Tests), wartet es nie. */
+const TIMEOUT = Symbol('timeout')
+function after($: EngineInterface, ms: number): Promise<typeof TIMEOUT> {
+  try {
+    return $.clock.sleep(ms).then(() => TIMEOUT, () => new Promise<never>(() => undefined))
+  } catch {
+    return new Promise<never>(() => undefined)
+  }
+}
+
 async function call($: EngineInterface, path: string, body?: unknown) {
   const s = await server($)
   if (!s) return undefined
   try {
-    const r = await $.http.fetch(`${s.url}${path}`, {
+    const request = $.http.fetch(`${s.url}${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       headers: { 'x-walkie-token': s.token, 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
+    // /ask wartet absichtlich lange auf die gesprochene Antwort. Alles andere ist kurz: Ohne
+    // Grenze hing eine Anfrage an einen gerade beendeten Walkie für immer – und mit ihr der
+    // Sessionstart oder das Postfach.
+    const r = path.startsWith('/ask') ? await request
+      : await Promise.race([request, after($, CALL_TIMEOUT_MS)])
+    if (r === TIMEOUT) return undefined
     return r.ok ? (JSON.parse(r.text || 'null') as unknown) : undefined
   } catch {
     return undefined                          // App gerade nicht erreichbar -> egal
@@ -279,9 +297,11 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
     ? 'Home'
     : trimmed.split(/[\\/]/).pop() || cwd
   announced = ''
-  await ensureAnnounced($)
+  // Erst den Takt, dann anmelden: Der Takt meldet die Session auch später noch an (Walkie startet
+  // erst danach), die Anmeldung selbst darf ihn nie aufhalten.
   poller?.cancel()
   poller = $.clock.every(500, () => void pollInbox($).catch(() => undefined))
+  await ensureAnnounced($)
 }
 
 export const register: Register = on => {
