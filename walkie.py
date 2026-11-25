@@ -860,6 +860,7 @@ class Walkie(QWidget):
         self.rec_file = None
         self.play_proc = None
         self.whisper = None
+        self.read_aloud = {}               # sid -> (Zeit, Text): zuletzt vorgelesen (Router-Kontext)
         self.whisper_loading = True     # Start-Thread übernimmt den ersten Versuch
         self.whisper_retry_at = 0.0
         self.piper = None
@@ -2142,7 +2143,9 @@ class Walkie(QWidget):
         if self.answer_req:
             # mindestens WINDOW s; solange gesprochen wird (relativ zum Grundrauschen, weil
             # Headset-Mikros leise sind) bis MAX s verlängern
-            if data and self.noise is not None and rms > max(0.0015, self.noise * 2.5):
+            # Mindestschwelle nur gegen digitale Stille (Nullen): 0.0015 lag bei einem leisen
+            # Mikro (RDP) über der Sprache selbst, und die Aufnahme brach mitten im Satz ab
+            if data and self.noise is not None and rms > max(0.0003, self.noise * 2.5):
                 self.answer_voice = time.time()
             now = time.time()
             window, most = S.get("WALKIE_ANSWER_WINDOW"), S.get("WALKIE_ANSWER_MAX")
@@ -2635,6 +2638,7 @@ class Walkie(QWidget):
         if req not in self.pending:
             return                                  # schon beantwortet (Play war schneller)
         self.pending[req]["prompt"] = self.named(sid, who, Speech(" fragt: ")) + summary
+        self.heard_from(sid, summary)
         self.last_said = self.pending[req]["prompt"]
         if S.get("WALKIE_RAISE"):
             self.in_thread(self.raise_session, sid, None, True)
@@ -2726,6 +2730,9 @@ class Walkie(QWidget):
                 self.deliver_terminal(text, self.term_pos())
                 return
             sessions = self.with_context(self.bridge.active_sessions())
+            for sid_, (ts, said) in self.read_aloud.items():
+                if sid_ in sessions:
+                    sessions[sid_]["read_aloud_ts"], sessions[sid_]["read_aloud"] = ts, said
             if getattr(self, "direct", None) not in sessions:
                 self.direct = None                     # Session des Direktmodus ist weg
             # verstehen statt blind weiterleiten: Ziel + aufgeräumter Auftrag (router.understand).
@@ -3032,8 +3039,15 @@ class Walkie(QWidget):
         """Antwort einer Session vorlesen – gesprochen oder getippt (lang: zusammengefasst)."""
         if not (self.voice_on and text.strip()):
             return
-        self.say_q.put(self.named(sid, who) + self.summarize(text, request=self.request_of(sid)),
-                       speechq.URGENT)
+        summary = self.summarize(text, request=self.request_of(sid))
+        self.heard_from(sid, summary)
+        self.say_q.put(self.named(sid, who) + summary, speechq.URGENT)
+
+    def heard_from(self, sid, text):
+        """Merken, was der Nutzer zuletzt von welcher Session gehört hat. Der Router bekommt es
+        als Kontext (wer gerade etwas gesagt hat, worauf sich eine Nachfrage beziehen kann) und
+        entscheidet selbst – keine feste Regel."""
+        self.read_aloud[sid] = (time.time(), str(text))
 
     def answer_pipeline(self, wav, req):
         again = False

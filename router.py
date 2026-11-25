@@ -21,6 +21,8 @@ may speak any language; write "message" in the user's language.
 
 Running Claude Code sessions (JSON):
 {sessions}
+("read_aloud": what the assistant last read aloud to the user from that session, an answer or a
+question, "read_aloud_to_user_s_ago" seconds ago. The user often reacts to what they just heard.)
 
 Project folders WITHOUT a running session: {folders}
 Direct mode: {direct}
@@ -449,6 +451,9 @@ def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: 
                  "last_prompt": (v.get("prompt") or "")[:160],
                  "last_answer": (v.get("text") or "")[-200:],
                  "addressed_by_user_s_ago": int(time.time() - v.get("user_ts", v.get("ts", 0))),
+                 "read_aloud_to_user_s_ago": (int(time.time() - v["read_aloud_ts"])
+                                              if v.get("read_aloud_ts") else None),
+                 "read_aloud": (v.get("read_aloud") or "")[-300:],
                  "in_conversation": k == thread}
              for k, v in sessions.items()}
     try:

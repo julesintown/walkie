@@ -1067,6 +1067,19 @@ class WalkieTest(unittest.TestCase):
         b.check_silence()
         b.stop_listening.assert_called_once()
 
+    def test_read_aloud_answer_is_router_context_not_a_rule(self):
+        """Was vorgelesen wurde, bekommt der Router als Kontext; wen der Nutzer zuletzt
+        angesprochen hat, bleibt unverändert (entscheiden soll das Modell)."""
+        import time
+        from unittest.mock import patch
+        b = self.b
+        b.voice_target = ("andere", time.time() - 30)
+        with patch.object(b, "summarize", return_value="Fix gebaut, alle Tests grün."), \
+                patch.object(type(b), "voice_on", True, create=True):
+            b.speak_answer("S", "walkie", "Ich habe den Fix gebaut.")
+        self.assertEqual(b.voice_target[0], "andere")
+        self.assertEqual(b.read_aloud["S"][1], "Fix gebaut, alle Tests grün.")
+
     def test_reply_to_session_question_is_not_cut_at_answer_max(self):
         """Frei formulierte Antwort auf eine Frage: läuft, solange gesprochen wird. Freigaben
         bleiben bei WALKIE_ANSWER_MAX (20 s brachen lange Antworten mitten im Satz ab)."""
