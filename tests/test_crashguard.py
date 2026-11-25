@@ -65,6 +65,26 @@ class CrashGuard(unittest.TestCase):
         self.assertIn("Timeout", log)
         self.assertIn("stuck_in_device_call", log)
 
+    def test_watchdog_restarts_only_a_hung_gui_thread(self):
+        """Figur eingefroren (GUI-Thread blockiert): Der Wächter startet neu – solange der
+        Herzschlag kommt, nie. Vor dem ersten Herzschlag (Start) auch nicht."""
+        import threading
+        import time
+        sys.path.insert(0, str(HERE))
+        import crashguard
+        crashguard._beat = None
+        fired, logs = threading.Event(), []
+        crashguard.watchdog(fired.set, logs.append, limit=0.3, poll=0.05)
+        time.sleep(0.5)
+        self.assertFalse(fired.is_set())                # noch kein Herzschlag
+        for _ in range(10):                             # GUI lebt
+            crashguard.hang_heartbeat()
+            time.sleep(0.05)
+        self.assertFalse(fired.is_set())
+        self.assertTrue(fired.wait(2))                  # Herzschlag bleibt aus
+        self.assertIn("hänger", logs[0])
+        crashguard._beat = None
+
     def test_alive(self):
         sys.path.insert(0, str(HERE))
         import crashguard

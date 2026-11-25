@@ -3715,6 +3715,17 @@ def self_update(walkie):
         time.sleep(UPDATE_EVERY_S)
 
 
+def restart_after_hang():
+    """Vom Wächter (crashguard.watchdog): einen neuen Walkie starten, der wartet, bis dieser
+    Prozess weg ist, und diesen sofort beenden – der GUI-Thread hängt, ein sauberes Beenden
+    (aboutToQuit) käme nie an."""
+    import paths
+    paths.HERE = HERE
+    os.environ["WALKIE_WAIT_PID"] = str(os.getpid())
+    paths.launch("cli.py", "start")
+    os._exit(3)
+
+
 def main():
     single_instance()
     try:                                   # für `walkie`/Plugin-Kopien: wo die Installation liegt
@@ -3743,6 +3754,7 @@ def main():
     QTimer(app, timeout=lambda: None).start(250)  # damit Strg+C greift
     crashguard.hang_heartbeat()
     QTimer(app, timeout=crashguard.hang_heartbeat).start(2000)   # Hänger -> Stacks in crash.log
+    crashguard.watchdog(restart_after_hang, dbg)                 # hängt er weiter: neu starten
     code = app.exec()                       # aboutToQuit hat schon aufgeräumt (cleanup)
     # Hart beenden: Hintergrund-Threads fremder Bibliotheken (z. B. der Hotkey-Listener)
     # dürfen das Beenden nicht ewig aufhalten – genau das ist passiert.

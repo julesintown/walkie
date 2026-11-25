@@ -8,6 +8,7 @@ Thread-Stacks nach <RUN>/crash.log – ebenso, wenn der GUI-Thread hängt (hang_
 import faulthandler
 import sys
 import threading
+import time
 import traceback
 
 _crash_file = None
@@ -70,6 +71,29 @@ def install(log, run_dir=None, notify=None):
 
 
 HANG_SECONDS = 15
+RESTART_AFTER = 45        # so lange hängt der GUI-Thread, dann startet der Walkie sich neu
+_beat = None
+
+
+def watchdog(restart, log, limit=RESTART_AFTER, poll=5.0):
+    """Hängt der GUI-Thread länger als limit Sekunden (kein hang_heartbeat mehr), ruft ein
+    eigener Thread restart() auf. Die Figur ist dann eingefroren, reagiert auf nichts und
+    lässt sich nicht einmal mehr mit `walkie stop` beenden (gemessen unter Windows: GUI-Thread
+    blockierte in Qt, Brücke lief weiter). Ohne Wächter blieb sie so, bis jemand den Prozess
+    im Task-Manager beendete. Startet erst nach dem ersten Herzschlag."""
+    def run():
+        while True:
+            time.sleep(poll)
+            if _beat is None:
+                continue
+            stuck = time.monotonic() - _beat
+            if stuck > limit:
+                try:
+                    log(f"hänger: GUI-Thread seit {stuck:.0f} s blockiert – starte neu")
+                    restart()
+                finally:
+                    return
+    threading.Thread(target=run, daemon=True, name="watchdog").start()
 
 
 def hang_heartbeat():
@@ -77,6 +101,8 @@ def hang_heartbeat():
     schreibt faulthandler die Stacks aller Threads nach crash.log: Ein Hänger („reagiert
     nicht“, z. B. nach dem Trennen eines Headsets) ist sonst nicht zu finden, weil weder eine
     Exception noch ein Absturz auftritt. Einmal je Hänger; der Prozess läuft weiter."""
+    global _beat
+    _beat = time.monotonic()
     if _crash_file is None:
         return
     try:

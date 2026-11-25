@@ -930,7 +930,62 @@ def cmd_default(_args):
     cmd_start([])
 
 
+def wait_for_exit(pid, timeout=20):
+    """Bis der Prozess pid beendet ist (Neustart nach einem Hänger, siehe walkie.py)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and pid_alive(pid):
+        time.sleep(0.2)
+
+
+def pid_alive(pid):
+    if sys.platform == "win32":
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)            # QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(k.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259
+        finally:
+            k.CloseHandle(h)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def kill_pid(pid):
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+    else:
+        import signal
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def lock_pid():
+    """PID der laufenden Instanz: aus server.json (die Brücke schreibt sie), sonst aus dem Lock
+    (unter Windows ist dessen erstes Byte gesperrt und oft nicht lesbar)."""
+    from hook import LOCK, server_info
+    pid = (server_info() or {}).get("pid")
+    if isinstance(pid, int) and pid > 0:
+        return pid
+    try:
+        return int(Path(LOCK).read_text(encoding="ascii").strip() or 0) or None
+    except (OSError, ValueError):
+        return None
+
+
 def cmd_start(_args):
+    waiting = os.environ.pop("WALKIE_WAIT_PID", "")
+    if waiting.isdigit():
+        wait_for_exit(int(waiting))
     if bridge_ready():
         ok("läuft schon")
         return
@@ -958,7 +1013,7 @@ def cmd_stop(_args):
         ok("läuft nicht")
         return
     requested = False
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         if not requested:
             requested = bridge_post("/quit")    # beim Start kann server.json noch fehlen
@@ -966,6 +1021,13 @@ def cmd_stop(_args):
             ok("beendet")
             return
         time.sleep(0.2)
+    pid = lock_pid()
+    if pid and pid != os.getpid() and pid_alive(pid):
+        kill_pid(pid)                         # hängt (Figur eingefroren): hart beenden
+        wait_for_exit(pid, 10)
+        if not walkie_running():
+            ok("beendet (hing – hart beendet)")
+            return
     die(f"reagiert nicht – siehe {RUN / 'walkie.log'}")
 
 
