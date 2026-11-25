@@ -3461,6 +3461,21 @@ def single_instance():
     _LOCK.flush()
 
 
+def setup_plugins():
+    """Walkie-Plugin in Claude Code und Codex eintragen (einmalig), damit sich auch selbst
+    gestartete Sessions melden – wie die globalen Hooks bei Antigravity und Gemini."""
+    import plugins
+    try:
+        added = plugins.ensure(dbg)
+    except Exception as ex:  # noqa: BLE001 – nie den Start stören
+        dbg(f"plugins: {ex!r}")
+        return
+    if added:
+        notify(t("{name} ist jetzt in {agents} eingetragen. Schon laufende Sessions verbinden "
+                 "sich nach /reload-plugins, neue von selbst.", name=WALKIE_NAME,
+                 agents=", ".join(added)))
+
+
 def main():
     single_instance()
     try:                                   # für `walkie`/Plugin-Kopien: wo die Installation liegt
@@ -3481,6 +3496,7 @@ def main():
         os._exit(1)
     app.setWindowIcon(QIcon(walkie.anim.s.anims["Idle"].frame(0, 0)))   # Icon = die Figur
     walkie.show()
+    threading.Thread(target=setup_plugins, daemon=True).start()
     app.aboutToQuit.connect(walkie.cleanup)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     signal.signal(signal.SIGTERM, lambda *_: app.quit())

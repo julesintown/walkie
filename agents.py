@@ -13,7 +13,7 @@ Jeder Agent kann sich nachträglich anbinden, indem er beim Antwortende
 aufruft.
 
   python agents.py plugin-hooks   # hooks/hooks.json fürs Claude-Plugin neu erzeugen
-  python agents.py uninstall      # global eingetragene Hooks (agy, gemini) entfernen
+  python agents.py uninstall      # globale Hooks (agy, gemini) und Walkie-Plugins entfernen
 """
 import json
 import os
@@ -331,6 +331,8 @@ def uninstall():
     """Alles entfernen, was außerhalb des Repos eingetragen wurde."""
     for cls in (Antigravity, Gemini):
         cls("", "whisper").uninstall_hooks()
+    import plugins
+    plugins.uninstall()
 
 
 def make_agent(system_prompt, stt_mode):

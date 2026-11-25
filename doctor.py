@@ -113,6 +113,13 @@ def main(argv=None):
                  f"Agent '{agent.name}': {exe} fehlt – für Gespräche mit diesem Agent installieren")
         for state, text in agent.doctor():
             line(state, text)
+        import plugins
+        for name, a in plugins.AGENTS.items():
+            if shutil.which(plugins._bin(name)):
+                have = a["installed"]()
+                line(True if have else None, f"Walkie-Plugin in {a['label']}: " + (
+                    "installiert" if have else "unbekannt" if have is None
+                    else "fehlt – einrichten: python plugins.py install"))
         caps = agent.capabilities()
         if caps:
             print(f"      kann: {', '.join(caps)}")
