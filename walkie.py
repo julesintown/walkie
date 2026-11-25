@@ -3686,6 +3686,35 @@ def setup_plugins():
                  agents=", ".join(added)))
 
 
+UPDATE_EVERY_S = 6 * 3600
+
+
+def self_update(walkie):
+    """Installation ohne Git (install.ps1): beim Start und alle UPDATE_EVERY_S Stunden auf
+    GitHub nach einem neuen Stand schauen, ihn einspielen und neu starten, sobald der Walkie
+    nichts zu tun hat. Ein Git-Checkout bleibt unberührt (selfupdate.info() ist None)."""
+    import selfupdate
+    if not selfupdate.info(HERE):
+        return
+    while True:
+        res = selfupdate.update(HERE, log=dbg)
+        if res:
+            if res["packages"]:
+                import paths
+                dbg("update: Pakete nachinstallieren")
+                subprocess.run([paths.python(), str(HERE / "cli.py"), "setup", "--no-start",
+                                "--no-assets"], capture_output=True, env=paths.clean_env(),
+                               **paths.no_window())
+            while walkie.state != "idle" or walkie.pending:
+                time.sleep(5)                   # nie mitten in einem Gespräch neu starten
+            dbg("update: neu starten")
+            import paths
+            paths.HERE = HERE
+            paths.launch("cli.py", "restart")
+            return
+        time.sleep(UPDATE_EVERY_S)
+
+
 def main():
     single_instance()
     try:                                   # für `walkie`/Plugin-Kopien: wo die Installation liegt
@@ -3707,6 +3736,7 @@ def main():
     app.setWindowIcon(QIcon(walkie.anim.s.anims["Idle"].frame(0, 0)))   # Icon = die Figur
     walkie.show()
     threading.Thread(target=setup_plugins, daemon=True).start()
+    threading.Thread(target=self_update, args=(walkie,), daemon=True).start()
     app.aboutToQuit.connect(walkie.cleanup)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     signal.signal(signal.SIGTERM, lambda *_: app.quit())

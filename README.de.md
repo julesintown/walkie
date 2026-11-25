@@ -73,6 +73,21 @@ Spracherkennung (Whisper) und Stimme (Piper) laufen auf deinem Rechner. Details 
 
 ## Installation
 
+**Windows (ohne Git, ohne WSL, ohne Adminrechte):**
+[Walkie.exe](https://github.com/julesintown/walkie/releases/download/launcher/Walkie.exe)
+herunterladen und doppelklicken – oder diese Zeile in PowerShell einfügen:
+
+```powershell
+irm https://raw.githubusercontent.com/julesintown/walkie/main/install.ps1 | iex
+```
+
+Das installiert den Walkie nach `%LOCALAPPDATA%\walkie\app`, richtet ihn ein (1–3 Minuten) und
+verbindet ihn mit Claude Code, auch mit dem Code-Tab der Claude-Desktop-App. Offene Sessions
+übernehmen mit ihrer Anmeldung auch das Denken des Walkies: Ein eigenes `claude` oder eine
+zweite Anmeldung braucht es nicht. Der Walkie aktualisiert sich beim Start und alle paar Stunden
+selbst von GitHub, die exe muss nie ersetzt werden. Bei der unsignierten exe kann Windows
+SmartScreen warnen: *Weitere Informationen → Trotzdem ausführen*.
+
 Walkie wird in erster Linie für **Claude Code** entwickelt und dort getestet. Öffne eine Claude-Code-Sitzung und gib die folgenden Befehle nacheinander ein.
 
 ```

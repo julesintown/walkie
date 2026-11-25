@@ -1,0 +1,37 @@
+name: Walkie.exe
+
+# Baut den Windows-Starter (launcher/Walkie.cs) und legt ihn unter einer festen Adresse ab:
+#   https://github.com/julesintown/walkie/releases/download/launcher/Walkie.exe
+# Nur nötig, wenn sich der Starter selbst ändert – den Walkie-Code aktualisiert der Walkie
+# selbst (selfupdate.py), dafür wird die exe nicht neu gebaut.
+on:
+  push:
+    branches: [main]
+    paths: [launcher/**, .github/workflows/launcher.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bauen
+        shell: pwsh
+        run: |
+          & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" -nologo -optimize `
+            -target:winexe -out:Walkie.exe launcher\Walkie.cs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Veröffentlichen
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view launcher *> $null
+          if ($LASTEXITCODE) {
+            gh release create launcher --title "Walkie.exe (Windows-Starter)" `
+              --notes "Doppelklick installiert den Walkie beim ersten Mal und startet ihn danach. Updates holt sich der Walkie selbst."
+          }
+          gh release upload launcher Walkie.exe --clobber
