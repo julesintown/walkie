@@ -178,9 +178,49 @@ def _standard_dirs(home):
     return names
 
 
+def claude_in_wsl():
+    """Windows: Läuft Claude Code beim Nutzer in WSL? Ja, wenn im Menü „Claude in WSL“ gewählt
+    ist oder es unter Windows gar kein `claude` gibt (und in WSL eins). Dann öffnen neue
+    Claude-Sessions dort und die Projektordner liegen im WSL-Home. Sonst (und außerhalb von
+    Windows) nie."""
+    import shutil
+
+    import settings
+    if sys.platform != "win32" or not wsl_claude_ok():
+        return False
+    return settings.get("WALKIE_BRAIN") == "claude-wsl" or not shutil.which("claude")
+
+
+_wsl_dirs = None
+
+
+def wsl_project_dirs():
+    """Ordner im WSL-Home (als POSIX-Pfade, wie die Sessions dort sie melden). Einmal gelesen."""
+    global _wsl_dirs
+    if _wsl_dirs is None:
+        from pathlib import PurePosixPath
+        _wsl_dirs = []
+        try:
+            r = _run(["wsl.exe", "-e", "sh", "-c",
+                      'for d in "$HOME"/*/; do printf "%s\\n" "${d%/}"; done'],
+                     capture_output=True, timeout=20, stdin=subprocess.DEVNULL)
+            _wsl_dirs = [PurePosixPath(x) for x in (r.stdout or "").splitlines()
+                         if x.startswith("/") and not PurePosixPath(x).name.startswith(".")]
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return list(_wsl_dirs)
+
+
 def project_dirs():
     """Projektordner, die der Nutzer nennen könnte: Ordner im Home (nicht versteckt) und
-    alles, worin schon einmal eine Claude-Session lief."""
+    alles, worin schon einmal eine Claude-Session lief – unter Windows mit Claude in WSL auch
+    die Ordner im WSL-Home."""
+    if claude_in_wsl():
+        return sorted(wsl_project_dirs() + _local_project_dirs(), key=str)
+    return _local_project_dirs()
+
+
+def _local_project_dirs():
     home = Path.home()
     standard = {n.lower() for n in _standard_dirs(home)}
     dirs = {d for d in home.iterdir() if d.is_dir() and not d.name.startswith(".")

@@ -2984,6 +2984,18 @@ class Walkie(QWidget):
         self.jump_req = sid                         # (Hauptthread erledigt das in step())
         self.bridge.send(sid, text)
 
+    @staticmethod
+    def claude_terminal(sid, folder, default_cwd):
+        """Kommandozeile + Arbeitsordner für eine neue Claude-Session mit fester ID. Unter Windows
+        mit Claude in WSL (router.claude_in_wsl): per wsl.exe im WSL-Ordner (genanntes Repo, sonst
+        das WSL-Home) – vorher öffnete sich das nicht angemeldete Windows-Claude in einem
+        Windows-Ordner."""
+        if router.claude_in_wsl():
+            where = folder if folder and str(folder).startswith("/") else "~"
+            return (["wsl.exe", "--cd", where, *router.WSL_CLAUDE[1:], "--session-id", sid],
+                    str(Path.home()))
+        return [shutil.which("claude") or "claude", "--session-id", sid], (folder or default_cwd)
+
     def open_new_session(self, text, folder=None, agent="claude"):
         """Neue, sichtbare Session des eingestellten Agents öffnen. Claude meldet sich beim
         Walkie an und bekommt den Auftrag dann (als gesprochen markiert -> Antwort wird
@@ -2994,11 +3006,12 @@ class Walkie(QWidget):
             self.open_other_session(text, folder, agent, sessions)
             return
         if not (text or "").strip():                 # nur „öffne eine Session“: leer öffnen
-            cwd = folder or new_session_dir()
             sid = str(uuid.uuid4())
-            dbg(f"neue session in {cwd}: ohne auftrag ({sid[:8]})")
-            ok = paths.open_terminal([shutil.which("claude") or "claude", "--session-id", sid],
-                                     cwd=cwd, title=f"{WALKIE_NAME}: {Path(cwd).name}")
+            argv, cwd = self.claude_terminal(sid, folder, new_session_dir())
+            name = Path(str(folder or cwd)).name if folder or not router.claude_in_wsl() else "WSL"
+            dbg(f"neue session in {folder or cwd}: ohne auftrag ({sid[:8]}) – {argv[0]}")
+            ok = paths.open_terminal(argv, cwd=cwd, title=f"{WALKIE_NAME}: {name}")
+            cwd = folder or ("~" if router.claude_in_wsl() else cwd)
             if ok:
                 # Der nächste Satz („recherchier mal …“) gehört zu ihr – auch bevor sie sich
                 # angemeldet hat (Postfach wartet, bis sie bereit ist)
@@ -3006,7 +3019,7 @@ class Walkie(QWidget):
                 self.voice_target = (sid, time.time())
                 self.focus_sid = sid
             self.bus.state.emit("idle")
-            self.say_q.put(Speech("Ich öffne eine neue Session in {folder}.", folder=Path(cwd).name)
+            self.say_q.put(Speech("Ich öffne eine neue Session in {folder}.", folder=name)
                            if ok else Speech("Kein Terminal gefunden."))
             return
         # Fenster nach dem Auftrag benennen (nicht „neue Session“ – sonst klingt jede spätere
@@ -3019,10 +3032,9 @@ class Walkie(QWidget):
         # Genannter Projektordner, sonst der Ordner für neue Sessions – nicht der Ordner einer
         # anderen Session (ein neues Thema gehört nicht in ein fremdes Projekt) und nicht das
         # Home (dort fragt Claude jedes Mal nach der Freigabe).
-        cwd = folder or new_session_dir()
-        dbg(f"neue session in {cwd}: {title}")
-        ok = paths.open_terminal([shutil.which("claude") or "claude", "--session-id", sid], cwd=cwd,
-                                 title=f"{WALKIE_NAME}: {title}")
+        argv, cwd = self.claude_terminal(sid, folder, new_session_dir())
+        dbg(f"neue session in {folder or cwd}: {title} – {argv[0]}")
+        ok = paths.open_terminal(argv, cwd=cwd, title=f"{WALKIE_NAME}: {title}")
         self.bus.state.emit("idle")
         if ok:
             self.say_q.put(Speech("Ich öffne eine neue Session dafür."))

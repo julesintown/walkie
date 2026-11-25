@@ -1171,6 +1171,22 @@ class WalkieTest(unittest.TestCase):
         self.assertEqual(opened.call_args.kwargs["folder"], "/w/shop")
         self.assertNotIn(reqs[0], b.pending)
 
+    def test_windows_with_claude_in_wsl_opens_sessions_in_wsl(self):
+        """Windows mit Claude in WSL: neue Claude-Sessions per wsl.exe im WSL-Ordner – nicht das
+        (nicht angemeldete) Windows-Claude in einem Windows-Ordner. Sonst wie bisher."""
+        from unittest.mock import patch
+        W = type(self.b)
+        with patch.object(self.ev.router, "claude_in_wsl", return_value=True):
+            argv, cwd = W.claude_terminal("ID", "/home/j/walkie", "C:/x")
+            self.assertEqual(argv[:3], ["wsl.exe", "--cd", "/home/j/walkie"])
+            self.assertEqual(argv[-2:], ["--session-id", "ID"])
+            argv, _ = W.claude_terminal("ID", None, "C:/x")
+            self.assertEqual(argv[2], "~")                       # ohne Ordner: WSL-Home
+        with patch.object(self.ev.router, "claude_in_wsl", return_value=False):
+            argv, cwd = W.claude_terminal("ID", None, "/data/sessions")
+            self.assertEqual(Path(argv[0]).stem.lower(), "claude")   # Windows: claude.CMD
+            self.assertEqual(cwd, "/data/sessions")
+
     def test_open_session_without_task_opens_it_empty(self):
         """„Mach eine neue Claude-Session im Repo X auf“ ohne Auftrag: Session im Ordner öffnen,
         nichts hineinschicken (sonst bekam sie „Neue Session öffnen“ als erste Nachricht)."""
@@ -1180,10 +1196,11 @@ class WalkieTest(unittest.TestCase):
         b = self.b
         b.say_q = queue.Queue()
         b.awaiting_new = None
-        with patch.object(paths, "open_terminal", return_value=True) as term:
+        with patch.object(paths, "open_terminal", return_value=True) as term, \
+                patch.object(self.ev.router, "claude_in_wsl", return_value=False):
             b.open_new_session("", folder="/w/designrepo", agent="claude")
         argv = term.call_args.args[0]
-        self.assertTrue(argv[0].endswith("claude"))
+        self.assertEqual(Path(argv[0]).stem.lower(), "claude")
         self.assertEqual(term.call_args.kwargs["cwd"], "/w/designrepo")
         self.assertIsNone(b.awaiting_new)                 # kein Diktat, das zugestellt wird
         # der nächste Satz: die neue Session ist Ziel und Gesprächspartner, auch bevor sie

@@ -64,6 +64,20 @@ class BrainOrder(unittest.TestCase):
             # gewählt zuerst, dann der Zweitagent als Ersatz (z. B. bei Nutzungslimit)
             self.assertEqual(router.brains(), ["claude-wsl", "antigravity", "claude"])
 
+    def test_claude_in_wsl_only_on_windows_when_chosen_or_no_windows_claude(self):
+        with patch.object(router.sys, "platform", "linux"):
+            self.assertFalse(router.claude_in_wsl())
+        with patch.object(router.sys, "platform", "win32"), \
+                patch.object(router, "wsl_claude_ok", return_value=True):
+            with patch.dict(os.environ, WALKIE_BRAIN="auto"), \
+                    patch("shutil.which", which_only("claude")):
+                self.assertFalse(router.claude_in_wsl())         # Windows-Claude da: bleibt
+            with patch.dict(os.environ, WALKIE_BRAIN="claude-wsl"), \
+                    patch("shutil.which", which_only("claude")):
+                self.assertTrue(router.claude_in_wsl())          # im Menü gewählt
+            with patch.dict(os.environ, WALKIE_BRAIN="auto"), patch("shutil.which", which_only()):
+                self.assertTrue(router.claude_in_wsl())          # nur in WSL vorhanden
+
     def test_no_wsl_probe_outside_windows(self):
         with patch.object(router, "_wsl_claude", None), \
                 patch.object(router.sys, "platform", "linux"), \
