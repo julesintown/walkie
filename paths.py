@@ -141,6 +141,11 @@ def linux_terminal(argv, cwd):
     return None
 
 
+def wt_escape(argv):
+    """Argumente für Windows Terminal: „;“ ist dort der Trenner zwischen Tabs, „\\;“ ein echtes."""
+    return [a.replace(";", "\\;") for a in argv]
+
+
 def open_terminal(argv, cwd=None, title="Claude", env_extra=None):
     """Programm in einem neuen, sichtbaren Fenster des Standard-Terminals starten.
     Linux: siehe linux_terminal(), macOS: Terminal.app, Windows: Windows Terminal, sonst cmd.
@@ -159,7 +164,10 @@ def open_terminal(argv, cwd=None, title="Claude", env_extra=None):
         # npm-Shims (claude.cmd, codex.cmd, gemini.cmd) findet CreateProcess nicht ohne Endung
         argv = [shutil.which(argv[0]) or argv[0], *argv[1:]]
         if shutil.which("wt"):
-            cmd = ["wt", "--title", title, "-d", cwd, *argv]
+            # wt trennt seine Kommandozeile an „;“ in mehrere Tabs – ein „;“ im Befehl (etwa im
+            # bash -lc-Skript für WSL-Sessions) muss als „\;“ hinein, sonst startet wt den Rest
+            # als eigenes Programm („Die angegebene Datei wurde nicht gefunden“)
+            cmd = ["wt", "--title", title, "-d", cwd, *wt_escape(argv)]
         else:
             cmd = ["cmd", "/c", "start", title, "cmd", "/k", *argv]
         return subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP, **kw)

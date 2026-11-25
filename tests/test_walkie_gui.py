@@ -1182,12 +1182,27 @@ class WalkieTest(unittest.TestCase):
             self.assertEqual(argv[-2:], ["--session-id", "ID"])
             argv, _ = W.claude_terminal("ID", None, "C:/x")
             self.assertIn(".local/share/walkie/sessions", argv[6])   # ohne Ordner: nicht ins Home
+            self.assertNotIn(";", argv[6])   # wt trennt Tabs an „;“ (Fehler 0x80070002)
             argv, _ = W.claude_terminal("ID", "C:\\Users\\j\\proj", "C:/x")
             self.assertEqual(argv[2], "C:\\Users\\j\\proj")          # Windows-Ordner: wsl --cd kann das
         with patch.object(self.ev.router, "claude_in_wsl", return_value=False):
             argv, cwd = W.claude_terminal("ID", None, "/data/sessions")
             self.assertEqual(Path(argv[0]).stem.lower(), "claude")   # Windows: claude.CMD
             self.assertEqual(cwd, "/data/sessions")
+
+    def test_windows_terminal_gets_semicolons_escaped(self):
+        """Windows Terminal trennt seine Kommandozeile an „;“ in Tabs – ein „;“ im Befehl muss
+        als „\\;“ übergeben werden, sonst startet wt den Rest als eigenes Programm."""
+        from unittest.mock import patch
+        import paths
+        with patch.object(paths, "WIN", True), \
+                patch("shutil.which", side_effect=lambda n: "wt" if n == "wt" else None), \
+                patch("subprocess.Popen") as popen, \
+                patch("subprocess.CREATE_NEW_PROCESS_GROUP", 0, create=True):
+            paths.open_terminal(["wsl.exe", "-e", "bash", "-lc", "a; b"], cwd="C:/x")
+        cmd = popen.call_args.args[0]
+        self.assertEqual(cmd[:5], ["wt", "--title", "Claude", "-d", "C:/x"])
+        self.assertEqual(cmd[-1], "a\\; b")
 
     def test_open_session_without_task_opens_it_empty(self):
         """„Mach eine neue Claude-Session im Repo X auf“ ohne Auftrag: Session im Ordner öffnen,

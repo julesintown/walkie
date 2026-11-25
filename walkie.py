@@ -3010,7 +3010,7 @@ class Walkie(QWidget):
                 # ohne Projekt nicht ins Home (dort fragt Claude jedes Mal nach der Freigabe),
                 # sondern in den Sessions-Ordner des Walkies – wie unter Linux
                 argv = ["wsl.exe", "--cd", "~", "-e", "bash", "-lc",
-                        'd="$HOME/.local/share/walkie/sessions"; mkdir -p "$d" && cd "$d" && '
+                        'd="$HOME/.local/share/walkie/sessions" && mkdir -p "$d" && cd "$d" && '
                         'exec claude "$@"', "claude"]
             return [*argv, "--session-id", sid], str(Path.home())
         return [shutil.which("claude") or "claude", "--session-id", sid], (folder or default_cwd)
