@@ -1918,7 +1918,7 @@ class Walkie(QWidget):
         self.target_x = None
         self.set_state("listening")
         self.talk_warned = False
-        self.rec_limit.start(TALK_MAX * 1000 if answer == TALK else
+        self.rec_limit.start(TALK_MAX * 1000 if self.free_speech(answer) else
                              int(S.get("WALKIE_ANSWER_MAX") * 1000) + 500 if answer else 120_000)
         self.rec_pos, self.rec_start = 44, time.time()
         self.max_rms, self.answer_voice = 0.0, 0.0
@@ -2087,6 +2087,13 @@ class Walkie(QWidget):
             self.term.kitty("send-key", "enter").check_returncode()
             self.prompt_seen.wait(timeout=8)
 
+    def free_speech(self, answer):
+        """Freies Reden oder die Antwort auf eine Frage einer Session (kind "reply"): so lange
+        zuhören, wie gesprochen wird (bis TALK_MAX). WALKIE_ANSWER_MAX gilt nur für kurze
+        Antworten auf Freigaben und Optionen – sonst brach die Aufnahme nach 20 s mitten im
+        Satz ab."""
+        return answer == TALK or (bool(answer) and self.pending.get(answer, {}).get("kind") == "reply")
+
     def check_silence(self):
         """Pegel der laufenden Aufnahme prüfen; nach WALKIE_SILENCE s Stille absenden
         (Antworten: Antwortfenster, siehe unten)."""
@@ -2122,10 +2129,13 @@ class Walkie(QWidget):
             gap = 1.2
             if self.answer_req == TALK:               # freies Reden: länger, mehr Pause erlaubt
                 window, most, gap = max(window, 4.0), TALK_MAX, 2.0
-                if now - self.rec_start >= TALK_MAX - TALK_WARN and not self.talk_warned:
-                    self.talk_warned = True           # gleich ist Schluss: hörbar warnen
-                    dbg("reden: zeitlimit naht")
-                    self.in_thread(beep, "click")
+            elif self.free_speech(self.answer_req):   # Antwort auf eine Frage einer Session:
+                most, gap = TALK_MAX, 2.0             # frei formuliert, so lang wie gesprochen
+            if most == TALK_MAX and now - self.rec_start >= TALK_MAX - TALK_WARN \
+                    and not self.talk_warned:
+                self.talk_warned = True               # gleich ist Schluss: hörbar warnen
+                dbg("reden: zeitlimit naht")
+                self.in_thread(beep, "click")
             talking = now - getattr(self, "answer_voice", 0) < gap
             terminal_reply = self.pending.get(self.answer_req, {}).get("via") == "terminal"
             heard_voice = terminal_reply and getattr(self, "answer_voice", 0) >= self.rec_start

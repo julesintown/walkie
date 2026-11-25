@@ -203,7 +203,8 @@ SCHEMA = [
     Setting("WALKIE_ANSWER_WINDOW", "float", 6.0, "ask", "Antwortfenster (Sekunden)",
             "So lange hört die Figur mindestens zu.", min=2, max=30),
     Setting("WALKIE_ANSWER_MAX", "float", 20.0, "ask", "Höchstens (Sekunden)",
-            "Solange du sprichst, verlängert sich das Fenster bis hierhin.", min=4, max=60),
+            "Für Freigaben und Optionen: Solange du sprichst, verlängert sich das Fenster "
+            "bis hierhin. Antworten auf Fragen einer Session dürfen länger sein.", min=4, max=60),
     Setting("WALKIE_ASK_WAIT", "int", 120, "ask", "Auf Antwort warten (Sekunden)",
             "Danach entscheidest du nur noch am Rechner.", min=10, max=140),
 

@@ -107,7 +107,7 @@
  "So heißt die Figur in Hinweisen und im Agent-Prompt.": "What the figure is called in notifications and in the agent prompt.",
  "So lange hört die Figur mindestens zu.": "The figure listens at least this long.",
  "So lange wartet die Session auf deine gesprochene Antwort, bevor sie normal endet. Tippen am Rechner geht erst danach.": "How long the session waits for your spoken answer before ending normally. Typing at the computer only works after that.",
- "Solange du sprichst, verlängert sich das Fenster bis hierhin.": "While you speak, the window extends up to this.",
+ "Für Freigaben und Optionen: Solange du sprichst, verlängert sich das Fenster bis hierhin. Antworten auf Fragen einer Session dürfen länger sein.": "For permissions and options: while you speak, the window extends up to this. Replies to a session’s question may be longer.",
  "Sonnet": "Sonnet",
  "Sonnet – gründlicher": "Sonnet – more thorough",
  "Sprache & Modelle": "Speech & models",

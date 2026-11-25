@@ -1067,6 +1067,28 @@ class WalkieTest(unittest.TestCase):
         b.check_silence()
         b.stop_listening.assert_called_once()
 
+    def test_reply_to_session_question_is_not_cut_at_answer_max(self):
+        """Frei formulierte Antwort auf eine Frage: läuft, solange gesprochen wird. Freigaben
+        bleiben bei WALKIE_ANSWER_MAX (20 s brachen lange Antworten mitten im Satz ab)."""
+        import time
+        from unittest.mock import Mock
+        b = self.b
+        now = time.time()
+        b.rec_proc = Mock()
+        b.rec_file = str(TMP / "long-reply.wav")
+        Path(b.rec_file).touch()
+        for kind, cut in (("reply", False), (None, True)):
+            b.pending["q"] = {"session": "S", "who": "x", "tool": "Bash",
+                              **({"kind": kind} if kind else {})}
+            b.answer_req = "q"
+            b.rec_start, b.rec_pos, b.noise = now - 25, 0, 0.001
+            b.answer_voice = now - 0.5                # spricht noch
+            b.stop_listening = Mock()
+            b.check_silence()
+            self.assertEqual(b.stop_listening.called, cut, kind)
+        self.assertTrue(b.free_speech(self.ev.TALK))
+        self.assertFalse(b.free_speech(None))
+
     def test_silent_codex_reply_closes_without_another_prompt(self):
         import time
         from unittest.mock import Mock
