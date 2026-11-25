@@ -6,11 +6,14 @@ type Fetch = { url: string; init?: { method?: string; body?: string } }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function engine(on: (...args: any[]) => unknown, answers: Record<string, unknown>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  own: Record<string, (...args: any[]) => unknown> = {}) {
+  own: Record<string, ((...args: any[]) => unknown) | null> = {}) {   // null: Engine-Standard
   const fetched: Fetch[] = []
   const real = on
-  on = (name: string, fn: unknown) => real(name, own[name] ?? fn)
-  for (const name of Object.keys(own)) if (!['env.get', 'fs.read'].includes(name)) real(name, own[name])
+  const done = new Set<string>()
+  on = (name: string, fn: unknown) => {
+    done.add(name)
+    return own[name] === null ? undefined : real(name, own[name] ?? fn)
+  }
   on('command.register', () => ({ value: { command: 'walkie' } }))
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'S1' }) as never)
@@ -25,6 +28,7 @@ function engine(on: (...args: any[]) => unknown, answers: Record<string, unknown
     const path = new URL(f.url).pathname
     return { value: { ok: true, status: 200, headers: {}, text: JSON.stringify(answers[path] ?? {}) } } as never
   })
+  for (const name of Object.keys(own)) if (!done.has(name) && own[name]) real(name, own[name])
   return fetched
 }
 
@@ -192,4 +196,25 @@ test('ohne WSL: nur der eigene Statusordner, kein Windows-Suchen', async ($, on)
   expect(read.length).toBeGreaterThan(0)
   expect(read.some(p => p.startsWith('/mnt/'))).toBe(false)
   expect(runs).toBeLessThanOrEqual(1)          // höchstens ownPid
+})
+
+test('Walkie startet nach der Session: sie meldet sich bei der nächsten Meldung an', async ($, on) => {
+  let running = false
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  const fetched = engine(on, {}, {
+    'fs.read': () => {
+      if (!running) throw new Error('ENOENT')  // Walkie läuft noch nicht
+      return { value: JSON.stringify({ port: 4711, token: 'neu' }) }
+    },
+  })
+  await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: true })
+  expect(bodies(fetched, '/event')).toHaveLength(0)
+  running = true
+  // „denkt“ geht ohne Warten raus (void emit); weitere Tool-Aufrufe (ohne eigene Meldung,
+  // höchstens alle 5 s) lassen die Engine so lange weiterarbeiten
+  for (let i = 0; i < 20 && bodies(fetched, '/event').length < 2; i++) {
+    await $.tool.call({ tool: 'Read', file_path: '/x' } as never)
+  }
+  expect(bodies(fetched, '/event').map(b => b.event)).toEqual(['ready', 'tool'])
+  expect(bodies(fetched, '/event')[0]).toMatchObject({ session: 'S1', project: 'shop', cwd: '/home/x/shop' })
 })

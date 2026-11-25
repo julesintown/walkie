@@ -31,6 +31,8 @@ let turnStart = 0                  // Beginn der laufenden Runde (0 = keine läu
 let lastTool = 0
 let poller: { cancel: () => void } | undefined
 let polling = false
+let announcing = false
+let announced = ''                 // Walkie (Adresse + Token), bei dem diese Session angemeldet ist
 
 async function runDir($: EngineInterface): Promise<string> {
   const own = await $.env.get('WALKIE_RUN')
@@ -103,6 +105,7 @@ async function call($: EngineInterface, path: string, body?: unknown) {
 
 async function emit($: EngineInterface, event: string, extra: Record<string, unknown> = {}) {
   if (!sid) return
+  if (!announcing) await ensureAnnounced($)
   return call($, '/event', { event, ts: Date.now() / 1000, agent: 'claude', own: false,
     session: sid, project, ...extra })
 }
@@ -124,10 +127,32 @@ export function checkVoiceSubmission(res: Awaited<ReturnType<EngineInterface['pr
   if (res?.drop !== undefined) throw new Error(`prompt dropped: ${res.drop}`)
 }
 
+/** Session beim laufenden Walkie anmelden. Auch nachträglich: Startet der Walkie erst nach der
+ *  Session (oder neu), kennt er sie sonst erst bei ihrer nächsten Aktion. */
+async function announce($: EngineInterface, s: Server) {
+  announcing = true
+  try {
+    // Walkie auf Windows: Linux-PIDs sagen ihm nichts (er sucht das Fenster dann über den Titel)
+    const pid = s.windows ? undefined : await ownPid($)
+    if (await emit($, 'ready', { cwd, pid }) === undefined) return
+    announced = `${s.url} ${s.token}`
+    if (turnStart) await emit($, 'tool')      // mitten in einer Runde: „denkt“, nicht „bereit“
+  } finally {
+    announcing = false
+  }
+}
+
+/** Vor jeder Meldung und jedem Abruf: Kennt der laufende Walkie diese Session schon? */
+async function ensureAnnounced($: EngineInterface) {
+  const s = await server($)
+  if (s && `${s.url} ${s.token}` !== announced) await announce($, s)
+}
+
 async function pollInbox($: EngineInterface) {
   if (!sid || polling || Date.now() < retryAt) return
   polling = true
   try {
+    await ensureAnnounced($)
     const q = `session=${encodeURIComponent(sid)}&project=${encodeURIComponent(project)}` +
       `&cwd=${encodeURIComponent(cwd)}`
     const session = sid
@@ -245,9 +270,8 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   project = trimmed === home.replace(/[\\/]+$/, '')
     ? 'Home'
     : trimmed.split(/[\\/]/).pop() || cwd
-  // Walkie auf Windows: Linux-PIDs sagen ihm nichts (er sucht das Fenster dann über den Titel)
-  const pid = (await server($))?.windows ? undefined : await ownPid($)
-  await emit($, 'ready', { cwd, pid })
+  announced = ''
+  await ensureAnnounced($)
   poller?.cancel()
   poller = $.clock.every(500, () => void pollInbox($).catch(() => undefined))
 }
