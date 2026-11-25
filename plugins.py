@@ -32,7 +32,38 @@ TIMEOUT = 120
 
 
 def _bin(agent):
-    return os.environ.get(f"WALKIE_{agent.upper()}_BIN", agent)
+    """Befehl des Agents. Liegt `claude` nicht im Suchpfad (nur die Claude-Desktop-App ist
+    installiert), das Claude Code, das die App mitbringt: Es liest dieselben Plugin-Dateien
+    (~/.claude), also gilt ein damit eingetragenes Plugin auch für den Code-Tab der App."""
+    b = os.environ.get(f"WALKIE_{agent.upper()}_BIN", agent)
+    if agent == "claude" and b == agent and not shutil.which(b):
+        return desktop_claude() or b
+    return b
+
+
+def _version(name):
+    try:
+        return tuple(int(x) for x in name.split("."))
+    except ValueError:
+        return ()
+
+
+def desktop_claude():
+    """Claude Code aus der Claude-Desktop-App (Windows: %APPDATA%\\Claude\\claude-code\\
+    <version>\\<id>\\claude.exe, nur fertig geprüfte Kopien) – die neueste Version oder None."""
+    if sys.platform != "win32" or not os.environ.get("APPDATA"):
+        return None
+    root = Path(os.environ["APPDATA"]) / "Claude" / "claude-code"
+    try:
+        versions = sorted((d for d in root.iterdir() if _version(d.name)),
+                          key=lambda d: _version(d.name), reverse=True)
+        for v in versions:
+            for exe in sorted(v.glob("*/claude.exe")):
+                if (exe.parent / ".verified").exists():
+                    return str(exe)
+    except OSError:
+        pass
+    return None
 
 
 def source():

@@ -106,6 +106,28 @@ class SourceTest(unittest.TestCase):
             (home / "config.toml").write_text('[plugins."browser@openai"]\nenabled = true\n')
             self.assertFalse(plugins.codex_installed())
 
+    def test_desktop_claude_newest_verified(self):
+        appdata = Path(tempfile.mkdtemp())
+        root = appdata / "Claude" / "claude-code"
+        for ver, verified in (("2.1.9", True), ("2.1.330", True), ("2.1.331", False)):
+            d = root / ver / "abc123"
+            d.mkdir(parents=True)
+            (d / "claude.exe").write_text("")
+            if verified:
+                (d / ".verified").write_text("")
+        (root / "tmp").mkdir()
+        with patch.object(plugins.sys, "platform", "win32"), \
+                patch.dict(_os.environ, {"APPDATA": str(appdata)}):
+            self.assertEqual(plugins.desktop_claude(),
+                             str(root / "2.1.330" / "abc123" / "claude.exe"))
+            with patch.object(plugins.shutil, "which", return_value=None), \
+                    patch.dict(_os.environ, {}, clear=False) as env:
+                env.pop("WALKIE_CLAUDE_BIN", None)
+                self.assertEqual(plugins._bin("claude"), plugins.desktop_claude())
+                self.assertEqual(plugins._bin("codex"), "codex")
+        with patch.object(plugins.sys, "platform", "linux"):
+            self.assertIsNone(plugins.desktop_claude())
+
 
 if __name__ == "__main__":
     unittest.main()
