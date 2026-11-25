@@ -557,7 +557,9 @@ class SettingsWindow(QWidget):
         getattr(self, "step_" + self.STEPS[self.step])()
         self.setup_body.addStretch(1)
         outer.addWidget(self.scroll(body), 1)
+        outer.addSpacing(20)
         bar = QHBoxLayout()
+        bar.setSpacing(14)
         back = QPushButton(t("Zurück"))
         back.setVisible(self.step > 0)
         back.clicked.connect(lambda: self.goto_step(self.step - 1))
@@ -577,6 +579,9 @@ class SettingsWindow(QWidget):
         outer.addLayout(bar)
 
     def goto_step(self, i):
+        if getattr(self, "learn_timer", None) is not None and self.learn_timer.isActive():
+            self.learn_timer.stop()               # Anlernen läuft noch: mit dem Schritt beenden
+            LEARN_FLAG.unlink(missing_ok=True)
         self.step = max(0, min(len(self.STEPS) - 1, i))
         self.build_ui()
 
@@ -667,6 +672,11 @@ class SettingsWindow(QWidget):
                            "(einmalig, fragt nach deinem Passwort)."))
             u.clicked.connect(lambda: self.unlock_keys(u))
             self.setup_body.addWidget(hbox(u, None))
+        self.key_card(self.setup_page(), t("Tasten belegen (optional)"),
+                      t("Drück „Taste anlernen“ und dann eine Taste an deinem Kopfhörer – einmal, "
+                        "doppelt oder lang. In der markierten Zelle wählst du, was passieren soll. "
+                        "Du kannst das auch überspringen und später unter Einstellungen → "
+                        "Kopfhörer machen."))
 
     def step_done(self):
         self.step_head(t("Fertig. So redest du mit mir:"),
@@ -806,27 +816,34 @@ class SettingsWindow(QWidget):
         self.setting_row(c, "WALKIE_HEADSET", t("Welcher Kopfhörer"))
         self.setting_row(c, "WALKIE_HOTKEY")
 
-        c = self.card(pg, t("Tastenbelegung"),
+        self.key_card(pg, t("Tastenbelegung"),
                       t("Musik-Aktionen steuern deinen Player direkt – so behältst du Play/Pause, "
                         "Vor und Zurück wie gewohnt. „Doppelt“ und „lang“ funktionieren nicht bei "
                         "jedem Kopfhörer: einfach mit „Taste anlernen“ ausprobieren."))
+        pg.lay.addStretch(1)
+        return pg
+
+    def key_card(self, pg, title, sub):
+        """Tastenbelegung mit „Taste anlernen“ – in den Einstellungen und im Setup dieselbe."""
+        c = self.card(pg, title, sub)
         self.key_grid_box = QWidget()
         self.key_grid = QGridLayout(self.key_grid_box)
         self.key_grid.setContentsMargins(0, 4, 0, 4)
         self.key_grid.setHorizontalSpacing(10)
         self.key_grid.setVerticalSpacing(8)
-        c.lay.addWidget(self.key_grid_box)
         self.learn_btn = QPushButton(t("Taste anlernen"), objectName="primary")
         self.learn_btn.clicked.connect(self.start_learning)
         reset = QPushButton(t("Standard wiederherstellen"))
         reset.clicked.connect(self.reset_keys)
         self.learn_lbl = label("", "muted")
-        c.lay.addWidget(hbox(self.learn_btn, reset, None))
-        c.lay.addWidget(self.learn_lbl)
+        buttons = [hbox(self.learn_btn, reset, None), self.learn_lbl]
+        # im Setup zuerst die Knöpfe: dort ist Anlernen der eine Schritt, ohne Scrollen
+        for w in (buttons + [self.key_grid_box] if self.setup_mode
+                  else [self.key_grid_box] + buttons):
+            c.lay.addWidget(w)
         self.learn_timer = QTimer(self, timeout=self.poll_learning)
         self.build_key_grid()
-        pg.lay.addStretch(1)
-        return pg
+        return c
 
     def build_key_grid(self, highlight=None):
         g = self.key_grid

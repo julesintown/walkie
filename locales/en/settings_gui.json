@@ -134,5 +134,7 @@
  "Los geht's": "Let's go",
  "Gerade erkennt Whisper (lokal). {why}": "Whisper (local) is recognizing right now. {why}",
  "{name} – Einstellungen": "{name} – Settings",
- "…nichts…": "…nothing…"
+ "…nichts…": "…nothing…",
+ "Tasten belegen (optional)": "Assign buttons (optional)",
+ "Drück „Taste anlernen“ und dann eine Taste an deinem Kopfhörer – einmal, doppelt oder lang. In der markierten Zelle wählst du, was passieren soll. Du kannst das auch überspringen und später unter Einstellungen → Kopfhörer machen.": "Press “Learn button” and then a button on your headphones – once, twice or long. In the highlighted cell you choose what should happen. You can also skip this and do it later under Settings → Headphones."
 }
