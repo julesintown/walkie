@@ -599,9 +599,9 @@ def media_tracker():
 def media_key(name):
     """macOS/Windows: Medientaste ans System senden (pynput), damit Musik weiterläuft wie gewohnt."""
     try:
-        if sys.platform == "darwin":                 # sonst landet die Taste wieder bei uns
+        if sys.platform in ("darwin", "win32"):      # sonst landet die Taste wieder bei uns
             import keys
-            keys.mac_release()
+            keys.media_release()
             time.sleep(0.3)
         from pynput.keyboard import Controller, Key
         k = {"play": Key.media_play_pause, "next": Key.media_next,
@@ -808,8 +808,8 @@ class Walkie(QWidget):
         self.key_reader.start()
         import keys                                  # Hotkey (alle) + Medientasten (Win/macOS)
         self.key_backends = keys.start(self.bus.key.emit, log=dbg)
-        if sys.platform == "darwin":                 # Kopfhörertasten nur übernehmen, wenn es passt
-            QTimer(self, timeout=lambda: keys.mac_tick(
+        if sys.platform in ("darwin", "win32"):      # Kopfhörertasten nur übernehmen, wenn es passt
+            QTimer(self, timeout=lambda: keys.media_tick(
                 self.state in ("listening", "thinking", "speaking")
                 or self.play_proc is not None or bool(self.pending))).start(1000)
         threading.Thread(target=media_tracker, daemon=True).start()

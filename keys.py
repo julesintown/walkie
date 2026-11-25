@@ -105,6 +105,23 @@ def start_windows_media(emit, log):
     listener.daemon = True
     listener.start()
 
+    def smtc_key(key):
+        """Taste aus der Windows-Mediensteuerung: ein Druck ohne Halten (Windows meldet nur
+        „gedrückt“) – dieselbe Gesten-Erkennung, also auch Doppeldruck und Anlernen."""
+        now = time.time()
+        if key not in seen:
+            seen.add(key)
+            log(f"taste {key} (Windows-Mediensteuerung)")
+        g = current()
+        fire(g, g.feed(key, 1, now))
+        fire(g, g.feed(key, 0, now))
+
+    global win_remote
+    try:
+        win_remote = WinRemote(smtc_key, log)
+    except Exception as ex:  # noqa: BLE001 – ohne winrt bleibt der Tastatur-Weg
+        log(f"tasten: windows-mediensteuerung nicht verfügbar ({ex!r})")
+
     def poll():
         while True:
             time.sleep(0.05)
@@ -133,6 +150,159 @@ def write_learned(key, gesture):
             f.write(json.dumps({"key": key, "gesture": gesture, "ts": time.time()}) + "\n")
     except OSError:
         pass
+
+
+# Bluetooth-Kopfhörer (AVRCP) schicken ihre Tasten unter Windows meist NICHT als Tastendruck:
+# Windows reicht sie über die Mediensteuerung (SMTC) an die gerade aktive Wiedergabe-App weiter,
+# der Tastatur-Hook sieht nichts (gemessen mit MOTIF II A.N.C.). Darum meldet sich der Walkie –
+# wie auf dem Mac bei „Jetzt läuft“ – als Wiedergabe an, mit stiller Tonspur, und übernimmt die
+# Tasten nach denselben Regeln (WALKIE_MAC_KEYS, siehe unten). Ohne Admin-Rechte: winrt ist ein
+# normales Paket in der Walkie-Umgebung.
+WIN_TERMINALS = {
+    "windowsterminal.exe", "openconsole.exe", "conhost.exe", "cmd.exe", "powershell.exe",
+    "pwsh.exe", "wezterm-gui.exe", "alacritty.exe", "mintty.exe", "hyper.exe", "code.exe",
+    "cursor.exe", "claude.exe",
+    "mstsc.exe", "msrdc.exe",          # WSL über Remotedesktop/xrdp oder WSLg
+}
+SMTC_KEYS = {"PLAY": "PLAYPAUSE", "PAUSE": "PLAYPAUSE", "NEXT": "NEXTSONG",
+             "PREVIOUS": "PREVIOUSSONG"}
+
+
+def win_foreground_exe():
+    """Programmdatei des Fensters im Vordergrund (klein geschrieben), sonst ''."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+        h = kernel32.OpenProcess(0x1000, False, pid.value)       # QUERY_LIMITED_INFORMATION
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(520)
+            size = wintypes.DWORD(len(buf))
+            if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return buf.value.replace("/", "\\").rsplit("\\", 1)[-1].lower()
+        finally:
+            kernel32.CloseHandle(h)
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+class WinRemote:
+    """Walkie als Wiedergabe in der Windows-Mediensteuerung (nur solange er die Tasten will)."""
+
+    def __init__(self, on_key, log):
+        import winrt.windows.media as wm
+        import winrt.windows.media.playback as wp
+        self.wm, self.log, self.on_key = wm, log, on_key
+        self.player = wp.MediaPlayer()
+        self.player.command_manager.is_enabled = False     # Tasten nicht selbst abspielen lassen
+        smtc = self.smtc = self.player.system_media_transport_controls
+        for attr in ("is_play_enabled", "is_pause_enabled", "is_next_enabled",
+                     "is_previous_enabled"):
+            setattr(smtc, attr, True)
+        upd = smtc.display_updater
+        upd.type = wm.MediaPlaybackType.MUSIC
+        upd.music_properties.title = S.get("WALKIE_NAME")
+        upd.update()
+        smtc.add_button_pressed(self._pressed)
+        smtc.is_enabled = False
+        self.owned = False
+        self.dev = None
+        self.hold_until = 0.0          # so lange nicht übernehmen (nach einer Musik-Taste)
+        log("tasten: windows-mediensteuerung")
+
+    def _pressed(self, _sender, args):
+        try:
+            name = self.wm.SystemMediaTransportControlsButton(args.button).name
+        except Exception:  # noqa: BLE001
+            return
+        key = SMTC_KEYS.get(name)
+        if key:
+            self.on_key(key)
+
+    def own(self, on):
+        if on == self.owned:
+            return
+        if on:
+            self.dev = silent_track(self.log)        # Windows wertet nur echte Wiedergabe als aktiv
+            self.smtc.is_enabled = True
+            self.smtc.playback_status = self.wm.MediaPlaybackStatus.PLAYING
+        else:
+            self.smtc.playback_status = self.wm.MediaPlaybackStatus.STOPPED
+            self.smtc.is_enabled = False
+            stop_track(self.dev)
+            self.dev = None
+        self.owned = on
+        self.log(f"tasten: windows-medientasten {'übernommen' if on else 'freigegeben'}")
+
+    def tick(self, busy):
+        """Jede Sekunde aus dem Begleiter: Tasten übernehmen oder freigeben."""
+        if time.time() < self.hold_until and not busy:
+            want = False
+        elif S.get("WALKIE_MAC_KEYS") == "always" or busy or learning():
+            want = True
+        else:
+            want = win_foreground_exe() in WIN_TERMINALS
+        self.own(want)
+
+    def release(self, seconds=4.0):
+        """Vor einer Musik-Taste: kurz loslassen, damit sie beim echten Player ankommt."""
+        self.hold_until = time.time() + seconds
+        self.own(False)
+
+
+win_remote = None
+
+
+def silent_track(log):
+    """Stille Tonspur (s16 mono): wer keinen Ton ausgibt, ist für macOS und Windows keine
+    laufende Wiedergabe und bekommt keine Kopfhörertasten."""
+    try:
+        import miniaudio
+
+        def silence():
+            need = yield b""
+            while True:
+                need = yield b"\x00" * (need * 2)
+        dev = miniaudio.PlaybackDevice(output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1,
+                                       sample_rate=22050, buffersize_msec=200, app_name="Walkie")
+        gen = silence()
+        next(gen)
+        dev.start(gen)
+        return dev
+    except Exception as ex:  # noqa: BLE001
+        log(f"tasten: stille tonspur geht nicht ({ex})")
+        return None
+
+
+def stop_track(dev):
+    if dev is not None:
+        try:
+            dev.stop()
+            dev.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def media_tick(busy):
+    """Jede Sekunde aus dem Begleiter (macOS und Windows): Kopfhörertasten übernehmen oder
+    freigeben."""
+    for remote in (mac_remote, win_remote):
+        if remote is not None:
+            try:
+                remote.tick(busy)
+            except Exception as ex:  # noqa: BLE001
+                remote.log(f"tasten: {ex!r}")
+
+
+def media_release(seconds=4.0):
+    for remote in (mac_remote, win_remote):
+        if remote is not None:
+            remote.release(seconds)
 
 
 # ------------------------------------------------------------------ macOS
@@ -346,16 +516,3 @@ def mac_action(act, command):
     if command == "pause" and act == "talk":
         return "talk_off"
     return act
-
-
-def mac_tick(busy):
-    if mac_remote is not None:
-        try:
-            mac_remote.tick(busy)
-        except Exception as ex:  # noqa: BLE001
-            mac_remote.log(f"tasten: {ex!r}")
-
-
-def mac_release(seconds=4.0):
-    if mac_remote is not None:
-        mac_remote.release(seconds)

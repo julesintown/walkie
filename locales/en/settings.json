@@ -68,7 +68,7 @@
  "Klettern & Fensterkanten": "Climbing & window edges",
  "Kommt nur zum Zug, wenn du ihn ausdrücklich ansprichst (z. B. „frag Codex …“): öffnet dafür eine neue Session. Nur Claude-Sessions kann der Begleiter danach vorlesen und weiter ansprechen.": "Only used when you address it explicitly (e.g. “ask Codex …”): opens a new session for it. The companion can only read aloud and keep talking to Claude sessions afterwards.",
  "Kopfhörer": "Headset",
- "Kopfhörertasten (macOS)": "Headset buttons (macOS)",
+ "Kopfhörertasten (macOS, Windows)": "Headset buttons (macOS, Windows)",
  "Kurze Hin-und-her-Runden werden nicht angesagt.": "Short back-and-forth turns are not announced.",
  "Lange Antworten in einem Satz (kostet ein paar hundert Tokens).": "Long answers in one sentence (costs a few hundred tokens).",
  "Leer = Ordner des Walkie.": "Empty = the Walkie folder.",

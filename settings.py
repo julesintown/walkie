@@ -160,7 +160,7 @@ SCHEMA = [
     Setting("WALKIE_HOTKEY", "str", "<ctrl>+<alt>+<space>", "headset", "Hotkey zum Reden",
             "Funktioniert immer, auch ohne Kopfhörertasten. Leer = aus. Schreibweise wie "
             "<ctrl>+<alt>+<space> oder <ctrl>+<shift>+b.", restart=True),
-    Setting("WALKIE_MAC_KEYS", "choice", "smart", "headset", "Kopfhörertasten (macOS)",
+    Setting("WALKIE_MAC_KEYS", "choice", "smart", "headset", "Kopfhörertasten (macOS, Windows)",
             "smart = beim Walkie, wenn er spricht, zuhört oder fragt oder ein Terminal/Claude vorne "
             "ist – sonst steuern sie wie gewohnt die Musik. always = immer beim Walkie.",
             [("smart", "Smart"), ("always", "Immer beim Walkie")], advanced=True),
