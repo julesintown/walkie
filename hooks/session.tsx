@@ -80,7 +80,8 @@ async function readServer($: EngineInterface, dir: string | undefined,
   try {
     const s = JSON.parse(await $.fs.read(`${dir}/server.json`)) as { port: number; token: string }
     return { url: `http://127.0.0.1:${s.port}`, token: s.token, windows }
-  } catch {
+  } catch (error) {
+    lastReadError = `${dir}: ${String((error as Error)?.message ?? error).slice(0, 120)}`
     return undefined
   }
 }
@@ -178,6 +179,8 @@ async function pollInbox($: EngineInterface) {
   pollSince = Date.now()
   const gen = ++pollGen
   try {
+    // angemeldet, aber im Takt kein Walkie zu finden: sichtbar machen statt still nichts abholen
+    if (announced && !(await server($))) reportPollError($, new Error(`kein Walkie gefunden (${lastReadError})`))
     await ensureAnnounced($)
     const q = `session=${encodeURIComponent(sid)}&project=${encodeURIComponent(project)}` +
       `&cwd=${encodeURIComponent(cwd)}`
@@ -280,6 +283,22 @@ async function setupHint($: EngineInterface) {
     { timeoutMs: 12_000 })
 }
 
+let pollErrorShown = false
+let lastReadError = ''
+
+/** Scheitert der Postfach-Abruf, kommen gesprochene Sätze nie an – und das merkte bisher
+ *  niemand. Den ersten Fehler einmal zeigen, damit er sich finden lässt. */
+function reportPollError($: EngineInterface, error: unknown) {
+  if (pollErrorShown) return
+  pollErrorShown = true
+  try {
+    $.ui.toast(`🎧 Walkie: Postfach-Abruf gescheitert – ${String((error as Error)?.message ?? error).slice(0, 160)}`,
+      { timeoutMs: 30_000 })
+  } catch {
+    // Hinweis nicht möglich -> nichts weiter
+  }
+}
+
 /** Beim Sessionstart (aus main.tsx): Session anmelden und das Postfach abfragen. */
 export async function sessionStart($: EngineInterface, interactive: boolean) {
   // Nur echte, interaktive Sessions anmelden – nicht `claude -p` und nicht die Hilfsabfragen,
@@ -300,7 +319,7 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   // Erst den Takt, dann anmelden: Der Takt meldet die Session auch später noch an (Walkie startet
   // erst danach), die Anmeldung selbst darf ihn nie aufhalten.
   poller?.cancel()
-  poller = $.clock.every(500, () => void pollInbox($).catch(() => undefined))
+  poller = $.clock.every(500, () => void pollInbox($).catch(error => reportPollError($, error)))
   await ensureAnnounced($)
 }
 
