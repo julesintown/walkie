@@ -89,13 +89,22 @@ def context(sid):
             out["topic"] = t[:300]
             break
     last_user = last_answer = ""
+    limited = False
     for e in _lines(tail.decode("utf-8", "ignore")):
         t = _user_text(e)
         if t:
             last_user = t
+        if e.get("type") == "assistant":
+            # Nutzungslimit: Claude Code schreibt dann eine Fehlermeldung als Antwort
+            # ("isApiErrorMessage", "error": "rate_limit"); eine spätere echte Antwort hebt es auf
+            limited = bool(e.get("isApiErrorMessage")) and e.get("error") == "rate_limit"
+            if e.get("isApiErrorMessage"):
+                continue                       # keine Fehlermeldung als „letzte Antwort“
         a = _assistant_text(e)
         if a:
             last_answer = a
+    if limited:
+        out["limited"] = True
     if last_user:
         out["last_user"] = last_user[:300]
     if last_answer:

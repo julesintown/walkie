@@ -1757,7 +1757,7 @@ class Walkie(QWidget):
         now = time.time()
         waiting = {}
         for p in list(self.pending.values()):
-            if p.get("session") and p.get("kind") != "route":
+            if p.get("session") and p.get("kind") not in ("route", "handover"):
                 waiting.setdefault(p["session"], render(p.get("reason") or p.get("prompt") or ""))
         known = self.with_context(self.bridge.active_sessions(max_age=12 * 3600))
         facts = digest.collect(self.timeline.all(), self.seen_ts, dict(self.sessions), waiting,
@@ -1793,7 +1793,7 @@ class Walkie(QWidget):
         if not self.pending:
             self.say_q.put(Speech("Gerade ist keine Freigabe offen."))
             return
-        reqs = [r for r, x in self.pending.items() if x.get("kind") not in ("reply", "route")]
+        reqs = [r for r, x in self.pending.items() if x.get("kind") not in ("reply", "route", "handover")]
         if not reqs:
             self.say_q.put(Speech("Gerade ist keine Freigabe offen."))
             return
@@ -1821,7 +1821,7 @@ class Walkie(QWidget):
         for req, p in list(self.pending.items()):
             if p.get("via") in ("mod", "terminal"):
                 continue
-            limit = {"reply": S.get("WALKIE_REPLY_WAIT"), "route": 120}.get(
+            limit = {"reply": S.get("WALKIE_REPLY_WAIT"), "route": 120, "handover": 120}.get(
                 p.get("kind"), S.get("WALKIE_ASK_WAIT"))
             if now - p["ts"] > limit - 2 and self.pending.pop(req, None):
                 self.expired = (p["who"], now)
@@ -2436,6 +2436,8 @@ class Walkie(QWidget):
             self.focus_sid = sid                    # hier arbeitet der Nutzer gerade
         if kind == "ready" and not own:
             self.deliver_to_new_session(sid)
+        if kind in ("stop", "error") and ev.get("agent") == "claude":
+            self.in_thread(self.offer_handover, sid, ev.get("project") or label)
         if kind not in EVENT_STATE:
             return
         now = time.time()
@@ -2663,7 +2665,7 @@ class Walkie(QWidget):
             self.pending.pop(req, None)
 
     def prompt_text(self, p):
-        if p.get("kind") in ("reply", "route"):     # eigener Ansagetext
+        if p.get("kind") in ("reply", "route", "handover"):     # eigener Ansagetext
             return p["prompt"]
         if p["questions"] and len(p["answers"]) < len(p["questions"]):
             q = p["questions"][len(p["answers"])]
@@ -2826,6 +2828,57 @@ class Walkie(QWidget):
                 laps.lap(kind)
                 dbg(laps.line())
             keep_recording(wav)
+
+    HANDOVER_AGAIN = 1800       # s: dieselbe Session nicht öfter fragen
+
+    def offer_handover(self, sid, who):
+        """Claude-Session im Nutzungslimit: fragen, ob der Zweitagent übernehmen soll. Erkannt am
+        Transcript (Claude Code schreibt dann "error": "rate_limit"), nicht an Wortlisten. Bei
+        „ja“ öffnet sich eine Session des Zweitagenten im selben Ordner, mit Thema, letzter
+        Anfrage und letztem Stand – sie kennt den Verlauf sonst nicht."""
+        import shutil
+
+        import agents
+        import transcripts
+        second = S.get("WALKIE_AGENT_2")
+        if not second or second == "claude" or second not in agents.AGENTS:
+            return
+        try:
+            if not shutil.which(agents.AGENTS[second]("", "whisper").binary()):
+                return                               # Zweitagent nicht installiert
+        except Exception:  # noqa: BLE001 – z. B. eigener Befehl ohne WALKIE_AGENT_CMD
+            return
+        time.sleep(1.0)                              # Transcript ist evtl. noch nicht geschrieben
+        ctx = transcripts.context(sid)
+        if not ctx.get("limited"):
+            return
+        offered = getattr(self, "handover_offered", {})
+        self.handover_offered = offered
+        if time.time() - offered.get(sid, 0) < self.HANDOVER_AGAIN:
+            return
+        offered[sid] = time.time()
+        if any(p.get("kind") == "handover" for p in self.pending.values()):
+            return
+        cwd = (self.bridge.active_sessions(max_age=12 * 3600).get(sid) or {}).get("cwd") or ""
+        name = agent_label(second)
+        text = (f"Übernimm bitte die Arbeit aus einer Claude-Code-Session, die ihr Nutzungslimit "
+                f"erreicht hat. Projektordner: {cwd or 'unbekannt'}.\n"
+                f"Worum es ging: {ctx.get('topic', '')}\n"
+                f"Letzte Anfrage: {ctx.get('last_user', '')}\n"
+                f"Letzter Stand: {ctx.get('last_answer', '')[:1500]}\n"
+                f"Schau dir zuerst den aktuellen Stand im Ordner an (z. B. git status) und mach "
+                f"dann dort weiter, wo die Session aufgehört hat.")
+        req = f"h-{time.time_ns()}"
+        dbg(f"limit: {who} ({sid[:8]}) – frage nach Übergabe an {second}")
+        self.pending[req] = {
+            "session": "", "who": WALKIE_NAME, "kind": "handover", "via": "local",
+            "tool": "Übergabe", "detail": f"In {name} weitermachen", "reason": "",
+            "questions": [], "answers": {}, "ts": time.time(), "text": text,
+            "agent": second, "folder": cwd or None,
+            "prompt": Speech("Die Claude-Session {who} hat ihr Limit erreicht. Soll ich in "
+                             "{agent} weitermachen?", who=who, agent=name),
+        }
+        self.say_q.put(("ask", req))
 
     def ask_which_session(self, text, sids, sessions):
         """Mehrere Sessions kommen infrage: „Meinst du A oder B?“ – die Antwort wählt.
@@ -3107,6 +3160,10 @@ class Walkie(QWidget):
                     self.bus.ask.emit(req)
                     return
                 self.bus.state.emit("idle")
+                if p.get("kind") == "handover":      # keine klare Antwort: nichts öffnen
+                    self.pending.pop(req, None)
+                    self.speak(Speech("Okay, ich öffne nichts."))
+                    return
                 if p.get("kind") == "route":         # niemand wartet am Rechner: sauber beenden
                     self.pending.pop(req, None)
                     self.bridge.dictations.add("Unzugeordnet", p["text"])
@@ -3135,7 +3192,7 @@ class Walkie(QWidget):
             cmd_text = p.get("command") or p.get("detail")
             why = risk.risky(p.get("tool"), cmd_text)
             if (why and result.get("behavior") == "allow" and not p.get("confirmed")
-                    and p.get("kind") not in ("reply", "route") and not p.get("questions")):
+                    and p.get("kind") not in ("reply", "route", "handover") and not p.get("questions")):
                 p["confirmed"], p["tries"] = True, 0          # zweites, klares Ja nötig
                 self.bus.state.emit("idle")
                 cmd = speakable(cmd_text)[:140]
@@ -3162,6 +3219,12 @@ class Walkie(QWidget):
                         reply = Speech("Das konnte ich keiner Session zuordnen – sag es bitte nochmal.")
                 else:
                     reply = Speech("Okay, abgebrochen.")
+            elif p.get("kind") == "handover":          # Limit: im Zweitagenten weitermachen?
+                if result.get("behavior") == "allow":
+                    self.open_new_session(p["text"], folder=p.get("folder"), agent=p["agent"])
+                    reply = Speech("Okay, ich mache in {agent} weiter.", agent=agent_label(p["agent"]))
+                else:
+                    reply = Speech("Okay, ich öffne nichts.")
             elif p.get("via") == "mod":                # Frage am Ende: als nächster Prompt
                 if result.get("behavior") == "reply":
                     self.send_voice(p["session"], result["text"])

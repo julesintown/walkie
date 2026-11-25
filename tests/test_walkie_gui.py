@@ -1072,6 +1072,41 @@ class WalkieTest(unittest.TestCase):
         b.check_silence()
         b.stop_listening.assert_called_once()
 
+    def test_limit_offers_second_agent_and_opens_it_on_yes(self):
+        """Claude-Session im Limit: einmal fragen; „ja“ öffnet den Zweitagenten im Ordner der
+        Session mit dem bisherigen Stand, „nein“ öffnet nichts."""
+        import queue
+        from unittest.mock import patch
+        import transcripts
+        b, ev = self.b, self.ev
+        b.say_q = queue.Queue()
+        b.handover_offered = {}
+        b.bridge.on_event({"event": "ready", "session": "L1", "project": "shop", "cwd": "/w/shop"})
+        ctx = {"limited": True, "topic": "Report bauen", "last_user": "weiter",
+               "last_answer": "Halb fertig"}
+        settings = dict(WALKIE_AGENT_2="antigravity")
+        real_get = ev.S.get
+        with patch.object(transcripts, "context", return_value=ctx), \
+                patch.object(ev.time, "sleep"), \
+                patch("shutil.which", return_value="/bin/agy"), \
+                patch.object(ev.S, "get", side_effect=lambda k, *a: settings.get(k, real_get(k, *a))):
+            b.offer_handover("L1", "shop")
+            b.offer_handover("L1", "shop")                     # nicht doppelt fragen
+        reqs = [r for r, p in b.pending.items() if p.get("kind") == "handover"]
+        self.assertEqual(len(reqs), 1)
+        p = b.pending[reqs[0]]
+        self.assertEqual((p["agent"], p["folder"]), ("antigravity", "/w/shop"))
+        self.assertIn("Halb fertig", p["text"])
+        with patch.object(b, "open_new_session") as opened, patch.object(b, "speak"):
+            with patch.object(type(b), "interpret", staticmethod(
+                    lambda p, text, judge=None: ({"behavior": "allow"}, "Okay"))), \
+                    patch.object(ev, "transcribe", return_value="ja"):
+                b.answer_pipeline(str(TMP / "ja.wav"), reqs[0])
+        opened.assert_called_once()
+        self.assertEqual(opened.call_args.kwargs["agent"], "antigravity")
+        self.assertEqual(opened.call_args.kwargs["folder"], "/w/shop")
+        self.assertNotIn(reqs[0], b.pending)
+
     def test_missing_chosen_mic_falls_back_to_default(self):
         """Gewähltes Mikro weg (Kopfhörer getrennt): Standardmikro statt Fehlermeldung, Hinweis
         nur einmal je Gerät."""

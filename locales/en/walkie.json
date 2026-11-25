@@ -130,5 +130,8 @@
  "überschreibt den Verlauf auf dem Server": "overwrites history on the server",
  "🎧 {name} verbunden": "🎧 {name} connected",
  "{name} ist jetzt in {agents} eingetragen. Schon laufende Sessions verbinden sich nach /reload-plugins, neue von selbst.": "{name} is now set up in {agents}. Sessions already running connect after /reload-plugins, new ones on their own.",
- "{mic} ist nicht da – ich nehme das Standardmikrofon.": "{mic} is not available – using the default microphone."
+ "{mic} ist nicht da – ich nehme das Standardmikrofon.": "{mic} is not available – using the default microphone.",
+ "Die Claude-Session {who} hat ihr Limit erreicht. Soll ich in {agent} weitermachen?": "The Claude session {who} has hit its limit. Shall I continue in {agent}?",
+ "Okay, ich mache in {agent} weiter.": "Okay, continuing in {agent}.",
+ "Okay, ich öffne nichts.": "Okay, I won't open anything."
 }
