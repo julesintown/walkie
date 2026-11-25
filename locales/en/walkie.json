@@ -133,5 +133,7 @@
  "{mic} ist nicht da – ich nehme das Standardmikrofon.": "{mic} is not available – using the default microphone.",
  "Die Claude-Session {who} hat ihr Limit erreicht. Soll ich in {agent} weitermachen?": "The Claude session {who} has hit its limit. Shall I continue in {agent}?",
  "Okay, ich mache in {agent} weiter.": "Okay, continuing in {agent}.",
- "Okay, ich öffne nichts.": "Okay, I won't open anything."
+ "Okay, ich öffne nichts.": "Okay, I won't open anything.",
+ "Ich öffne eine neue Session in {folder}.": "Opening a new session in {folder}.",
+ "Kein Terminal gefunden.": "No terminal found."
 }

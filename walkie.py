@@ -2980,6 +2980,15 @@ class Walkie(QWidget):
         if agent != "claude":
             self.open_other_session(text, folder, agent, sessions)
             return
+        if not (text or "").strip():                 # nur „öffne eine Session“: leer öffnen
+            cwd = folder or new_session_dir()
+            dbg(f"neue session in {cwd}: ohne auftrag")
+            ok = paths.open_terminal([shutil.which("claude") or "claude"], cwd=cwd,
+                                     title=f"{WALKIE_NAME}: {Path(cwd).name}")
+            self.bus.state.emit("idle")
+            self.say_q.put(Speech("Ich öffne eine neue Session in {folder}.", folder=Path(cwd).name)
+                           if ok else Speech("Kein Terminal gefunden."))
+            return
         # Fenster nach dem Auftrag benennen (nicht „neue Session“ – sonst klingt jede spätere
         # Erwähnung wie ein Befehl, noch eine zu öffnen)
         title = " ".join(re.findall(r"[\w-]+", text)[:5]) or "Auftrag"
@@ -3005,7 +3014,10 @@ class Walkie(QWidget):
         import agents
         import paths
         cls = agents.AGENTS.get(agent)
-        argv = cls(SYSTEM_PROMPT, STT_MODE).new_session(spoken_prompt(text)) if cls else None
+        if cls and not (text or "").strip():           # ohne Auftrag: einfach den Agent starten
+            argv = cls(SYSTEM_PROMPT, STT_MODE).terminal_command()
+        else:
+            argv = cls(SYSTEM_PROMPT, STT_MODE).new_session(spoken_prompt(text)) if cls else None
         label = agent_label(agent) or agent
         self.bus.state.emit("idle")
         if not argv:

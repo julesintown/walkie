@@ -96,7 +96,8 @@ Rules:
 user's words and language, without filler, without meta talk about testing, dictation or the
 routing itself (drop e.g. "open a new session for this"), with obvious mishearings fixed
 (project names, technical terms). Invent nothing and drop nothing of substance; when unsure,
-stay close to the wording.
+stay close to the wording. For "new": when the user only asks to open a session and gives no
+task for it, "message" is "" (the session then opens empty, waiting for the user).
 
 Answer ONLY with JSON, e.g. {{"target": "<session-id>", "message": "..."}},
 {{"target": "new", "explicit": true, "message": "..."}},
@@ -520,6 +521,8 @@ def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: 
         if target == "new":
             fold = free.get(str(got.get("folder") or ""))
             new = "new_secondary" if got.get("agent") == "secondary" and agents[1] else "new"
+            if "message" in got and not str(got.get("message") or "").strip():
+                msg = ""                            # nur „öffne eine Session“: leer öffnen
             # a new session only on explicit request or for a named folder – never because the
             # model could not place a (often misheard) sentence
             if fold and by_folder(text, [Path(fold)]) is not None:

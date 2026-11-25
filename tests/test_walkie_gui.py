@@ -1171,6 +1171,23 @@ class WalkieTest(unittest.TestCase):
         self.assertEqual(opened.call_args.kwargs["folder"], "/w/shop")
         self.assertNotIn(reqs[0], b.pending)
 
+    def test_open_session_without_task_opens_it_empty(self):
+        """„Mach eine neue Claude-Session im Repo X auf“ ohne Auftrag: Session im Ordner öffnen,
+        nichts hineinschicken (sonst bekam sie „Neue Session öffnen“ als erste Nachricht)."""
+        import queue
+        from unittest.mock import patch
+        import paths
+        b = self.b
+        b.say_q = queue.Queue()
+        b.awaiting_new = None
+        with patch.object(paths, "open_terminal", return_value=True) as term:
+            b.open_new_session("", folder="/w/designrepo", agent="claude")
+        argv = term.call_args.args[0]
+        self.assertTrue(argv[0].endswith("claude"))
+        self.assertNotIn("--session-id", argv)
+        self.assertEqual(term.call_args.kwargs["cwd"], "/w/designrepo")
+        self.assertIsNone(b.awaiting_new)                 # kein Diktat, das zugestellt wird
+
     def test_missing_chosen_mic_falls_back_to_default(self):
         """Gewähltes Mikro weg (Kopfhörer getrennt): Standardmikro statt Fehlermeldung, Hinweis
         nur einmal je Gerät."""
