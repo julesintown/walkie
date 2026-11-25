@@ -31,6 +31,9 @@ let turnStart = 0                  // Beginn der laufenden Runde (0 = keine läu
 let lastTool = 0
 let poller: { cancel: () => void } | undefined
 let polling = false
+let pollSince = 0                  // Beginn des laufenden Abrufs
+let pollGen = 0
+const POLL_STUCK_MS = 20_000       // länger hängt ein Abruf nur, wenn seine Anfrage nie beantwortet wird
 let announcing = false
 let announced = ''                 // Walkie (Adresse + Token), bei dem diese Session angemeldet ist
 
@@ -149,8 +152,13 @@ async function ensureAnnounced($: EngineInterface) {
 }
 
 async function pollInbox($: EngineInterface) {
-  if (!sid || polling || Date.now() < retryAt) return
+  if (!sid || Date.now() < retryAt) return
+  // Eine Anfrage, die nie beantwortet wird (Walkie mitten im Beenden), hielt `polling` für immer
+  // fest: Die Session holte danach nichts mehr ab, gesprochene Sätze blieben im Walkie liegen.
+  if (polling && Date.now() - pollSince < POLL_STUCK_MS) return
   polling = true
+  pollSince = Date.now()
+  const gen = ++pollGen
   try {
     await ensureAnnounced($)
     const q = `session=${encodeURIComponent(sid)}&project=${encodeURIComponent(project)}` +
@@ -187,7 +195,7 @@ async function pollInbox($: EngineInterface) {
       await $.prompt.submit({ text })
     }
   } finally {
-    polling = false
+    if (gen === pollGen) polling = false   // ein spät endender, hängender Abruf gibt nichts frei
   }
 }
 
