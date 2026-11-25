@@ -162,5 +162,7 @@
  "中文": "中文",
  "日本語": "日本語",
  "한국어": "한국어",
- "Claude in WSL (Windows)": "Claude in WSL (Windows)"
+ "Claude in WSL (Windows)": "Claude in WSL (Windows)",
+ "Aussprache": "Pronunciation",
+ "Wie die Stimme Wörter sprechen soll, z. B. Walkie=Uohki; Claude=[[klˈɔːd]] ([[…]] = Lautschrift). Gehen den eingebauten vor (deutsch: Walkie, Claude, Gemini).": "How the voice should say words, e.g. Walkie=Uohki; Claude=[[klˈɔːd]] ([[…]] = phonemes). They take precedence over the built-in ones (German: Walkie, Claude, Gemini)."
 }

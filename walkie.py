@@ -3471,8 +3471,11 @@ class Walkie(QWidget):
             player.write(b"\x00\x00" * int(voice.config.sample_rate * lead))   # fehlt der Anfang
         if self.barge_ok():
             self.in_thread(self.barge_loop, clean, player)
+        import pronounce
+        model = (VOICES.get(name) or ("",))[0]
+        said = pronounce.apply(clean, model[:2], S.get("WALKIE_PRONOUNCE"))   # nur für die Stimme
         try:
-            for chunk in voice.synthesize(clean):
+            for chunk in voice.synthesize(said):
                 if self.stop_flag or S.get("WALKIE_VOICE") != name:
                     self.stop_flag = True
                     break

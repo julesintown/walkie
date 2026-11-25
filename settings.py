@@ -239,6 +239,10 @@ SCHEMA = [
             "anderer installierter Agent.",
             [("auto", "Automatisch"), ("claude", "Claude"), ("claude-wsl", "Claude in WSL (Windows)"),
              ("codex", "Codex"), ("antigravity", "Antigravity"), ("gemini", "Gemini")]),
+    Setting("WALKIE_PRONOUNCE", "str", "", "voice", "Aussprache",
+            "Wie die Stimme Wörter sprechen soll, z. B. Walkie=Uohki; Claude=[[klˈɔːd]] "
+            "([[…]] = Lautschrift). Gehen den eingebauten vor (deutsch: Walkie, Claude, Gemini).",
+            advanced=True),
     Setting("WALKIE_SUMMARY_MODEL", "choice", "haiku", "voice", "Claude-Modell fürs Denken",
             "", [("haiku", "Haiku – schnell, günstig"), ("sonnet", "Sonnet"),
                  ("opus", "Opus")]),
