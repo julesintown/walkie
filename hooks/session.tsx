@@ -176,6 +176,7 @@ async function announce($: EngineInterface, s: Server) {
 
 /** Vor jeder Meldung und jedem Abruf: Kennt der laufende Walkie diese Session schon? */
 async function ensureAnnounced($: EngineInterface) {
+  await followCwd($)
   const s = await server($)
   if (s && `${s.url} ${s.token}` !== announced) await announce($, s)
 }
@@ -329,11 +330,7 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   await setupHint($).catch(() => undefined)
   sid = own
   cwd = await $.session.cwd()
-  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
-  const trimmed = cwd.replace(/[\\/]+$/, '')
-  project = trimmed === home.replace(/[\\/]+$/, '')
-    ? 'Home'
-    : trimmed.split(/[\\/]/).pop() || cwd
+  project = await projectName($, cwd)
   announced = ''
   // Erst den Takt, dann anmelden: Der Takt meldet die Session auch später noch an (Walkie startet
   // erst danach), die Anmeldung selbst darf ihn nie aufhalten.
@@ -343,6 +340,28 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
 }
 
 let lateStart = false
+
+async function projectName($: EngineInterface, dir: string): Promise<string> {
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
+  const trimmed = dir.replace(/[\\/]+$/, '')
+  return trimmed === home.replace(/[\\/]+$/, '') ? 'Home' : trimmed.split(/[\\/]/).pop() || dir
+}
+
+/** Ordner gewechselt? Die Desktop-App startet Sessions auf Vorrat in ~/.claude/spares/spare-…
+ *  und gibt ihnen erst beim Öffnen ihr Projekt: Ohne Nachziehen hieß die Session im Walkie
+ *  „spare-Ex5RKg“. Neu anmelden schickt dem Walkie Ordner und Namen. */
+async function followCwd($: EngineInterface) {
+  try {
+    const now = await $.session.cwd()
+    if (!now || now === cwd) return
+    const name = await projectName($, now)
+    cwd = now
+    project = name
+    announced = ''
+  } catch {
+    // Engine gerade nicht erreichbar (Session endet): beim nächsten Mal
+  }
+}
 
 /** Session im Code-Tab der Claude-Desktop-App? Die App startet Claude Code über das SDK, die
  *  Engine meldet sie darum als nicht interaktiv – obwohl jemand davorsitzt. Ein `claude -p`,
@@ -389,7 +408,7 @@ export const register: Register = on => {
     const now = Date.now()
     if (now - lastTool > 5000) {             // „denkt noch“ – höchstens alle 5 s melden
       lastTool = now
-      void emit($, 'tool')
+      void emit($, 'tool').catch(() => undefined)   // Session endet gerade: Meldung egal
     }
     // Rückfragen zuerst per Stimme: der Walkie liest sie vor und hört zu; antwortest du, ist die
     // Frage erledigt, sonst geht der Dialog ganz normal auf. Dieser Weg liegt vor jeder

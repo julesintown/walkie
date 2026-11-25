@@ -105,6 +105,20 @@ test('Code-Tab der Desktop-App (SDK, nicht interaktiv) wird gemeldet, ein claude
   expect(bodies(fetched, '/event')).toEqual([])
 })
 
+test('Vorrats-Session der Desktop-App: nach dem Ordnerwechsel unter dem Projektnamen', async ($, on) => {
+  let dir = 'C:\\Users\\x\\.claude\\spares\\spare-Ex5RKg'
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  const fetched = engine(on, {}, { 'session.cwd': () => ({ value: dir }) as never })
+  await $.session.start({ cwd: dir, surface: 'terminal', isInteractive: true })
+  expect(bodies(fetched, '/event')[0]).toMatchObject({ event: 'ready', project: 'spare-Ex5RKg' })
+  dir = 'C:\\Users\\x\\shop'
+  for (let i = 0; i < 20 && !bodies(fetched, '/event').some(b => b.project === 'shop'); i++) {
+    await $.tool.call({ tool: 'Read', file_path: '/x' } as never)
+  }
+  expect(bodies(fetched, '/event').find(b => b.project === 'shop'))
+    .toMatchObject({ event: 'ready', cwd: 'C:\\Users\\x\\shop' })
+})
+
 test('Plugin da, App nie eingerichtet: Hinweis auf /walkie:start, höchstens dreimal', async ($, on) => {
   on('command.register', () => ({ value: { command: 'walkie' } }))
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
