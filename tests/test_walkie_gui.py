@@ -1184,9 +1184,31 @@ class WalkieTest(unittest.TestCase):
             b.open_new_session("", folder="/w/designrepo", agent="claude")
         argv = term.call_args.args[0]
         self.assertTrue(argv[0].endswith("claude"))
-        self.assertNotIn("--session-id", argv)
         self.assertEqual(term.call_args.kwargs["cwd"], "/w/designrepo")
         self.assertIsNone(b.awaiting_new)                 # kein Diktat, das zugestellt wird
+        # der nächste Satz: die neue Session ist Ziel und Gesprächspartner, auch bevor sie
+        # sich angemeldet hat – der Auftrag wartet in ihrem Postfach
+        sid = argv[argv.index("--session-id") + 1] if "--session-id" in argv else None
+        self.assertIsNotNone(sid)
+        self.assertEqual(b.voice_target[0], sid)
+        seen = {}
+
+        def understand(text, sessions, **k):
+            seen["sessions"], seen["last"] = sessions, k.get("last")
+            return "session", sid, text
+        old = (self.ev.transcribe, self.ev.router.understand)
+        self.ev.transcribe = lambda model, wav, hint=None: "Recherchier mal die Touren."
+        self.ev.router.understand = understand
+        b.whisper = object()
+        try:
+            with patch.object(b, "raise_session"):
+                b.talk_pipeline(str(TMP / "nichts.wav"))
+        finally:
+            self.ev.transcribe, self.ev.router.understand = old
+        self.assertTrue(seen["sessions"][sid]["just_opened"])
+        self.assertEqual(seen["last"][0], sid)
+        self.assertIn("Recherchier mal die Touren.", b.bridge.take_inbox(sid))
+        b.fresh_session = None
 
     def test_missing_chosen_mic_falls_back_to_default(self):
         """Gewähltes Mikro weg (Kopfhörer getrennt): Standardmikro statt Fehlermeldung, Hinweis
@@ -1232,6 +1254,29 @@ class WalkieTest(unittest.TestCase):
             b.speak_answer("S", "walkie", "Ich habe den Fix gebaut.")
         self.assertEqual(b.voice_target[0], "andere")
         self.assertEqual(b.read_aloud["S"][1], "Fix gebaut, alle Tests grün.")
+
+    def test_free_talk_survives_a_thinking_pause(self):
+        """Freies Reden per Kopfhörer: eine Denkpause von ein paar Sekunden beendet die Aufnahme
+        nicht (vorher nach 2 s) – erst der zweite Druck oder silence_limit."""
+        import time
+        from unittest.mock import Mock
+        b, ev = self.b, self.ev
+        now = time.time()
+        b.rec_proc = Mock()
+        b.rec_file = str(TMP / "pause.wav")
+        Path(b.rec_file).touch()
+        b.answer_req, b.silence_limit = ev.TALK, ev.HEADSET_SILENCE
+        b.rec_start, b.rec_pos, b.noise = now - 12, 0, 0.001
+        b.answer_voice = now - 6                        # 6 s still: überlegt gerade
+        b.stop_listening = Mock()
+        b.check_silence()
+        b.stop_listening.assert_not_called()
+        b.rec_start = now - ev.HEADSET_SILENCE - 10
+        b.answer_voice = now - ev.HEADSET_SILENCE - 1   # wirklich nichts mehr: Schluss
+        b.check_silence()
+        b.stop_listening.assert_called_once()
+        b.rec_proc = None
+        b.answer_req = None
 
     def test_reply_to_session_question_is_not_cut_at_answer_max(self):
         """Frei formulierte Antwort auf eine Frage: läuft, solange gesprochen wird. Freigaben

@@ -2165,8 +2165,12 @@ class Walkie(QWidget):
             now = time.time()
             window, most = S.get("WALKIE_ANSWER_WINDOW"), S.get("WALKIE_ANSWER_MAX")
             gap = 1.2
-            if self.answer_req == TALK:               # freies Reden: länger, mehr Pause erlaubt
-                window, most, gap = max(window, 4.0), TALK_MAX, 2.0
+            if self.answer_req == TALK:
+                # freies Reden (Kopfhörer, Klick): offen bis zum zweiten Druck – oder bis
+                # silence_limit lang nichts kam. Nach 2 s Pause abzubrechen schnitt jeden ab,
+                # der kurz überlegt („mach eine zweite Session im … – äh – walkie-Repo“).
+                window, most, gap = max(window, 4.0), TALK_MAX, max(2.0, self.silence_limit)
+                self.answer_voice = max(getattr(self, "answer_voice", 0), self.rec_start)
             elif self.free_speech(self.answer_req):   # Antwort auf eine Frage einer Session:
                 most, gap = TALK_MAX, 2.0             # frei formuliert, so lang wie gesprochen
             if most == TALK_MAX and now - self.rec_start >= TALK_MAX - TALK_WARN \
@@ -2758,6 +2762,12 @@ class Walkie(QWidget):
                 self.deliver_terminal(text, self.term_pos())
                 return
             sessions = self.with_context(self.bridge.active_sessions())
+            fresh = getattr(self, "fresh_session", None)
+            if fresh and time.time() - fresh["ts"] < self.FRESH_S and fresh["sid"] not in sessions:
+                # gerade leer geöffnet, noch nicht angemeldet: trotzdem ein mögliches Ziel
+                sessions[fresh["sid"]] = {"project": Path(fresh["cwd"]).name, "cwd": fresh["cwd"],
+                                          "ts": fresh["ts"], "user_ts": fresh["ts"],
+                                          "first_prompt": "", "just_opened": True}
             for sid_, (ts, said) in self.read_aloud.items():
                 if sid_ in sessions:
                     sessions[sid_]["read_aloud_ts"], sessions[sid_]["read_aloud"] = ts, said
@@ -2842,6 +2852,7 @@ class Walkie(QWidget):
             keep_recording(wav)
 
     HANDOVER_AGAIN = 1800       # s: dieselbe Session nicht öfter fragen
+    FRESH_S = 300               # s: so lange gilt eine leer geöffnete Session als Gesprächspartner
 
     def offer_handover(self, sid, who):
         """Claude-Session im Nutzungslimit: fragen, ob der Zweitagent übernehmen soll. Erkannt am
@@ -2982,9 +2993,16 @@ class Walkie(QWidget):
             return
         if not (text or "").strip():                 # nur „öffne eine Session“: leer öffnen
             cwd = folder or new_session_dir()
-            dbg(f"neue session in {cwd}: ohne auftrag")
-            ok = paths.open_terminal([shutil.which("claude") or "claude"], cwd=cwd,
-                                     title=f"{WALKIE_NAME}: {Path(cwd).name}")
+            sid = str(uuid.uuid4())
+            dbg(f"neue session in {cwd}: ohne auftrag ({sid[:8]})")
+            ok = paths.open_terminal([shutil.which("claude") or "claude", "--session-id", sid],
+                                     cwd=cwd, title=f"{WALKIE_NAME}: {Path(cwd).name}")
+            if ok:
+                # Der nächste Satz („recherchier mal …“) gehört zu ihr – auch bevor sie sich
+                # angemeldet hat (Postfach wartet, bis sie bereit ist)
+                self.fresh_session = {"sid": sid, "cwd": cwd, "ts": time.time()}
+                self.voice_target = (sid, time.time())
+                self.focus_sid = sid
             self.bus.state.emit("idle")
             self.say_q.put(Speech("Ich öffne eine neue Session in {folder}.", folder=Path(cwd).name)
                            if ok else Speech("Kein Terminal gefunden."))

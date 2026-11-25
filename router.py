@@ -23,9 +23,13 @@ may speak any language; write "message" in the user's language.
 Running Claude Code sessions (JSON):
 {sessions}
 ("read_aloud": what the assistant last read aloud to the user from that session, an answer or a
-question, "read_aloud_to_user_s_ago" seconds ago. The user often reacts to what they just heard.)
+question, "read_aloud_to_user_s_ago" seconds ago. The user often reacts to what they just heard.
+"just_opened_empty": the user just had this session opened without a task – their next task
+usually belongs to it.)
 
 Project folders WITHOUT a running session: {folders}
+Project folders WITH a running session (a NEW session there only on explicit request, e.g. "a
+second session in walkie"): {busy_folders}
 Direct mode: {direct}
 Agents: primary {primary}; secondary {secondary}
 Hint from fast name/folder matching (can be wrong; a name in the sentence does not mean the
@@ -46,6 +50,8 @@ Targets:
   use "secondary". If the
   sentence belongs to one of the project folders without a session (speech recognition twists
   names, e.g. "shop front end" for "shop-frontend"), answer "new" with "folder": "<folder name>".
+  An explicitly requested new or second session in a folder WITH a running session is also
+  "new" with "explicit": true and that "folder".
 - "overview": the user wants to hear how things stand instead of giving work: what happened or
   what they missed, which sessions are done, working or waiting for them, the state or progress
   of one session or of the whole project – in any wording and language, also very short ones.
@@ -60,7 +66,9 @@ Targets:
   most 4 short sentences, natural, in the user's language, no markdown. Otherwise "reply": "".
   NOT feedback, ideas or questions about the voice
   assistant itself, its behaviour or its settings: those belong to the session "in_conversation"
-  (the user is probably developing or testing it there).
+  (the user is probably developing or testing it there). NOT a task or research request right
+  after the user had a session opened empty ("just_opened_empty"): they opened it for exactly
+  that work, so it goes to that session.
 - "show": the user only wants to SEE a session's window (bring it to the front); nothing is
   sent. "session": its id, or "" for the session of the current conversation.
 - "direct": the user wants everything they say from now on to go to one session only.
@@ -491,13 +499,17 @@ def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: 
                  "read_aloud_to_user_s_ago": (int(time.time() - v["read_aloud_ts"])
                                               if v.get("read_aloud_ts") else None),
                  "read_aloud": (v.get("read_aloud") or "")[-300:],
-                 "in_conversation": k == thread}
+                 "in_conversation": k == thread,
+                 **({"just_opened_empty": True} if v.get("just_opened") else {})}
              for k, v in sessions.items()}
     try:
         busy = {v.get("cwd") for v in sessions.values()}
-        free = {d.name: str(d) for d in project_dirs() if str(d) not in busy}
+        dirs = {d.name: str(d) for d in project_dirs()}
+        free = {n: d for n, d in dirs.items() if d not in busy}
+        taken = {n: d for n, d in dirs.items() if d in busy}
         out = ask_model(ROUTE_PROMPT.format(sessions=json.dumps(brief, ensure_ascii=False),
                                           folders=", ".join(free) or "none",
+                                          busy_folders=", ".join(taken) or "none",
                                           direct=f"active, session {direct}" if direct else "off",
                                           primary=agents[0], secondary=agents[1] or "none",
                                           text=text.replace('"', "'"), hint=hint),
@@ -519,13 +531,15 @@ def understand(text, sessions, env=None, cwd=None, model="haiku", log=lambda m: 
         if target == "direct_end":
             return ("direct_end", None, "") if direct else ("session", thread or latest(sessions), msg)
         if target == "new":
-            fold = free.get(str(got.get("folder") or ""))
+            name = str(got.get("folder") or "")
+            # Ordner mit laufender Session: eine zweite dort nur auf ausdrücklichen Wunsch
+            fold = free.get(name) or (taken.get(name) if got.get("explicit") is True else None)
             new = "new_secondary" if got.get("agent") == "secondary" and agents[1] else "new"
             if "message" in got and not str(got.get("message") or "").strip():
                 msg = ""                            # nur „öffne eine Session“: leer öffnen
             # a new session only on explicit request or for a named folder – never because the
             # model could not place a (often misheard) sentence
-            if fold and by_folder(text, [Path(fold)]) is not None:
+            if fold and (got.get("explicit") is True or by_folder(text, [Path(fold)]) is not None):
                 return new, fold, msg
             if got.get("explicit") is True:
                 return new, None, msg
