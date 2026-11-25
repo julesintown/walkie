@@ -216,7 +216,11 @@ def project_dirs():
     alles, worin schon einmal eine Claude-Session lief – unter Windows mit Claude in WSL auch
     die Ordner im WSL-Home."""
     if claude_in_wsl():
-        return sorted(wsl_project_dirs() + _local_project_dirs(), key=str)
+        # gleicher Name in WSL und unter Windows (z. B. „walkie“): der WSL-Ordner, dort lebt Claude
+        wsl = wsl_project_dirs()
+        names = {d.name.lower() for d in wsl}
+        return sorted(wsl + [d for d in _local_project_dirs() if d.name.lower() not in names],
+                      key=str)
     return _local_project_dirs()
 
 

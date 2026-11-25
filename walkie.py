@@ -2991,9 +2991,15 @@ class Walkie(QWidget):
         das WSL-Home) – vorher öffnete sich das nicht angemeldete Windows-Claude in einem
         Windows-Ordner."""
         if router.claude_in_wsl():
-            where = folder if folder and str(folder).startswith("/") else "~"
-            return (["wsl.exe", "--cd", where, *router.WSL_CLAUDE[1:], "--session-id", sid],
-                    str(Path.home()))
+            if folder:                               # WSL-Pfad oder Windows-Pfad: wsl --cd kann beides
+                argv = ["wsl.exe", "--cd", str(folder), *router.WSL_CLAUDE[1:]]
+            else:
+                # ohne Projekt nicht ins Home (dort fragt Claude jedes Mal nach der Freigabe),
+                # sondern in den Sessions-Ordner des Walkies – wie unter Linux
+                argv = ["wsl.exe", "--cd", "~", "-e", "bash", "-lc",
+                        'd="$HOME/.local/share/walkie/sessions"; mkdir -p "$d" && cd "$d" && '
+                        'exec claude "$@"', "claude"]
+            return [*argv, "--session-id", sid], str(Path.home())
         return [shutil.which("claude") or "claude", "--session-id", sid], (folder or default_cwd)
 
     def open_new_session(self, text, folder=None, agent="claude"):
@@ -3008,10 +3014,10 @@ class Walkie(QWidget):
         if not (text or "").strip():                 # nur „öffne eine Session“: leer öffnen
             sid = str(uuid.uuid4())
             argv, cwd = self.claude_terminal(sid, folder, new_session_dir())
-            name = Path(str(folder or cwd)).name if folder or not router.claude_in_wsl() else "WSL"
+            name = Path(str(folder or cwd)).name if folder or not router.claude_in_wsl() else "sessions"
             dbg(f"neue session in {folder or cwd}: ohne auftrag ({sid[:8]}) – {argv[0]}")
             ok = paths.open_terminal(argv, cwd=cwd, title=f"{WALKIE_NAME}: {name}")
-            cwd = folder or ("~" if router.claude_in_wsl() else cwd)
+            cwd = folder or ("~/.local/share/walkie/sessions" if router.claude_in_wsl() else cwd)
             if ok:
                 # Der nächste Satz („recherchier mal …“) gehört zu ihr – auch bevor sie sich
                 # angemeldet hat (Postfach wartet, bis sie bereit ist)

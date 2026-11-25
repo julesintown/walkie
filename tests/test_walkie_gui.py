@@ -1181,7 +1181,9 @@ class WalkieTest(unittest.TestCase):
             self.assertEqual(argv[:3], ["wsl.exe", "--cd", "/home/j/walkie"])
             self.assertEqual(argv[-2:], ["--session-id", "ID"])
             argv, _ = W.claude_terminal("ID", None, "C:/x")
-            self.assertEqual(argv[2], "~")                       # ohne Ordner: WSL-Home
+            self.assertIn(".local/share/walkie/sessions", argv[6])   # ohne Ordner: nicht ins Home
+            argv, _ = W.claude_terminal("ID", "C:\\Users\\j\\proj", "C:/x")
+            self.assertEqual(argv[2], "C:\\Users\\j\\proj")          # Windows-Ordner: wsl --cd kann das
         with patch.object(self.ev.router, "claude_in_wsl", return_value=False):
             argv, cwd = W.claude_terminal("ID", None, "/data/sessions")
             self.assertEqual(Path(argv[0]).stem.lower(), "claude")   # Windows: claude.CMD

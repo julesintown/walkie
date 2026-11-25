@@ -78,6 +78,18 @@ class BrainOrder(unittest.TestCase):
             with patch.dict(os.environ, WALKIE_BRAIN="auto"), patch("shutil.which", which_only()):
                 self.assertTrue(router.claude_in_wsl())          # nur in WSL vorhanden
 
+    def test_wsl_folder_wins_over_windows_folder_of_the_same_name(self):
+        from pathlib import PurePosixPath, PureWindowsPath
+        with patch.object(router, "claude_in_wsl", return_value=True), \
+                patch.object(router, "wsl_project_dirs",
+                             return_value=[PurePosixPath("/home/j/walkie")]), \
+                patch.object(router, "_local_project_dirs",
+                             return_value=[PureWindowsPath("C:/Users/j/walkie"),
+                                           PureWindowsPath("C:/Users/j/fotos")]):
+            dirs = {d.name: str(d) for d in router.project_dirs()}
+        self.assertEqual(dirs["walkie"], "/home/j/walkie")
+        self.assertIn("fotos", dirs)
+
     def test_no_wsl_probe_outside_windows(self):
         with patch.object(router, "_wsl_claude", None), \
                 patch.object(router.sys, "platform", "linux"), \
