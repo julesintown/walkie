@@ -5,7 +5,9 @@ import isolate  # noqa: E402,F401
 import sys
 import tempfile
 import types
+import os
 import unittest
+import unittest.mock
 import wave
 from pathlib import Path
 
@@ -63,3 +65,49 @@ class TranscribeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LazyWhisperTest(unittest.TestCase):
+    """Whisper gibt im Leerlauf seinen Speicher frei und lädt beim nächsten Reden von selbst."""
+
+    def test_unloads_after_idle_and_reloads_on_use(self):
+        import time
+        from transcription import LazyWhisper
+        loads = []
+
+        class Model:
+            def transcribe(self, audio, **kw):
+                return iter([f"seg:{audio}"]), "info"
+
+        lazy = LazyWhisper(lambda: loads.append(1) or Model(), idle_after=0.2)
+        self.assertEqual(lazy.transcribe("a"), (["seg:a"], "info"))
+        self.assertFalse(lazy.unload_if_idle())          # gerade benutzt
+        time.sleep(0.25)
+        self.assertTrue(lazy.unload_if_idle())
+        self.assertFalse(lazy.loaded)
+        lazy.warm()                                       # beim Beginn einer Aufnahme
+        for _ in range(50):
+            if lazy.loaded:
+                break
+            time.sleep(0.02)
+        self.assertTrue(lazy.loaded)
+        self.assertEqual(lazy.transcribe("b")[0], ["seg:b"])
+        self.assertEqual(len(loads), 2)
+
+    def test_zero_means_keep_loaded(self):
+        import time
+        from transcription import LazyWhisper
+        lazy = LazyWhisper(lambda: object(), idle_after=0)
+        lazy._get()
+        time.sleep(0.05)
+        self.assertFalse(lazy.unload_if_idle())
+        self.assertTrue(lazy.loaded)
+
+    def test_threads_sleep_and_are_capped(self):
+        import transcription
+        with unittest.mock.patch.dict(os.environ, {}, clear=False) as env:
+            env.pop("KMP_BLOCKTIME", None)
+            transcription.quiet_threads()
+            self.assertEqual(os.environ["KMP_BLOCKTIME"], "0")
+            self.assertEqual(os.environ["OMP_WAIT_POLICY"], "PASSIVE")
+        self.assertLessEqual(transcription.MAX_THREADS, 4)

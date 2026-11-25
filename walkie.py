@@ -1879,6 +1879,8 @@ class Walkie(QWidget):
         if self.device_stop.is_set() or (not prepared and (self.mic_owner or self.rec_proc)):
             return
         self.answer_req = answer
+        if self.whisper is not None and hasattr(self.whisper, "warm"):
+            self.whisper.warm()                 # entladen (Leerlauf)? Lädt, während du sprichst
         if (answer or STT_MODE != "claude") and self.whisper is None:
             self.in_thread(beep, "busy")
             if time.monotonic() < self.whisper_retry_at:
@@ -3561,24 +3563,43 @@ class Walkie(QWidget):
         try:
             if not self.need_whisper() or self.whisper is not None:
                 return
-            from transcription import whisper_model
-            self.whisper = whisper_model(WHISPER_MODEL, cpu_threads=os.cpu_count() or 4)
+            from transcription import LazyWhisper, whisper_model
+
+            def load():
+                model = whisper_model(WHISPER_MODEL)
+                try:                # der erste Durchlauf ist ~2 s langsamer: jetzt, nicht beim Reden
+                    import numpy as np
+                    noise = (np.random.default_rng(0).standard_normal(16000) * 0.01
+                             ).astype(np.float32)
+                    list(model.transcribe(noise, language=S.stt_language(),
+                                          beam_size=1, temperature=0.0, max_new_tokens=4,
+                                          condition_on_previous_text=False,
+                                          without_timestamps=True)[0])
+                except Exception as ex:  # noqa: BLE001
+                    dbg(f"Whisper aufwärmen: {ex!r}")
+                return model
+
+            lazy = LazyWhisper(load, S.get("WALKIE_WHISPER_UNLOAD") * 60, log=dbg)
+            lazy._get()                         # gleich laden: Fehler zeigen sich beim Start
+            self.whisper = lazy
             self.whisper_retry_at = 0.0
-            try:                    # der erste Durchlauf ist ~2 s langsamer: jetzt, nicht beim Reden
-                import numpy as np
-                noise = (np.random.default_rng(0).standard_normal(16000) * 0.01).astype(np.float32)
-                list(self.whisper.transcribe(noise, language=S.stt_language(),
-                                             beam_size=1, temperature=0.0, max_new_tokens=4,
-                                             condition_on_previous_text=False,
-                                             without_timestamps=True)[0])
-            except Exception as ex:  # noqa: BLE001
-                dbg(f"Whisper aufwärmen: {ex!r}")
+            threading.Thread(target=self.unload_loop, daemon=True, name="whisper-idle").start()
         except Exception as ex:
             self.whisper_retry_at = time.monotonic() + MODEL_RETRY_SECONDS
             dbg(f"Whisper ({WHISPER_MODEL}) konnte nicht geladen werden: {ex!r}. "
                 f"Nächster Versuch in {MODEL_RETRY_SECONDS} s.")
         finally:
             self.whisper_loading = False
+
+    def unload_loop(self):
+        """Whisper nach WALKIE_WHISPER_UNLOAD Minuten ohne Gespräch aus dem Speicher nehmen."""
+        while not self.device_stop.wait(30):
+            w = self.whisper
+            if w is None or not hasattr(w, "unload_if_idle"):
+                return
+            w.idle_after = S.get("WALKIE_WHISPER_UNLOAD") * 60
+            if self.state == "idle" and not self.rec_proc and not self.mic_owner:
+                w.unload_if_idle()
 
     @staticmethod
     def need_whisper():

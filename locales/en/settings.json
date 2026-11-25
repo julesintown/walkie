@@ -125,6 +125,8 @@
  "Unterbrechen durch Reden": "Interrupt by speaking",
  "Whisper (lokal)": "Whisper (local)",
  "Whisper-Modell": "Whisper model",
+ "Whisper nach … Minuten Pause entladen": "Unload Whisper after … minutes idle",
+ "Gibt den Arbeitsspeicher der Spracherkennung frei (0,3–0,8 GB), solange du nicht redest. Beim nächsten Reden lädt sie, während du sprichst. 0 = immer geladen lassen.": "Frees the speech recognition's memory (0.3–0.8 GB) while you are not talking. It loads again while you speak. 0 = always keep it loaded.",
  "Wohin dein Satz geht, wenn gerade keine Frage offen ist.": "Where your sentence goes when no question is open.",
  "Zuhören": "Listening",
  "Zweitagent": "Secondary agent",

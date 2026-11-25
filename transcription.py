@@ -25,11 +25,87 @@ def without_pyav():
         sys.modules.setdefault("av", stub)
 
 
+MAX_THREADS = 4          # mehr Threads machen Whisper kaum schneller, belegen aber Kerne
+
+
+def quiet_threads():
+    """Rechen-Threads von Whisper (Intel OpenMP in CTranslate2) nach getaner Arbeit sofort
+    schlafen legen. Ohne das warten sie aktiv auf die nächste Aufgabe und halten je einen Kern
+    auf Volllast – gemessen unter Windows: drei Threads, je 100 %, über zehn Minuten. Wirkt
+    nur, bevor CTranslate2 geladen ist; eigene Werte des Nutzers bleiben."""
+    os.environ.setdefault("KMP_BLOCKTIME", "0")
+    os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+
+
 def whisper_model(name, **kw):
     """faster_whisper.WhisperModel laden (CPU, int8) – auch ohne PyAV."""
+    quiet_threads()
     without_pyav()
     from faster_whisper import WhisperModel
+    kw.setdefault("cpu_threads", min(MAX_THREADS, os.cpu_count() or MAX_THREADS))
     return WhisperModel(name, device="cpu", compute_type="int8", **kw)
+
+
+class LazyWhisper:
+    """Whisper, das sich nach idle_after Sekunden ohne Nutzung aus dem Speicher nimmt (rund
+    0,3–0,8 GB je nach Modell) und bei der nächsten Erkennung von selbst wieder lädt. Nach außen
+    wie das Modell: transcribe(); warm() lädt im Voraus (beim Beginn einer Aufnahme – sie dauert
+    länger als das Laden). idle_after 0 = nie entladen."""
+
+    def __init__(self, load, idle_after=0.0, log=lambda m: None):
+        import threading
+        self._load, self.idle_after, self.log = load, idle_after, log
+        self._model = None
+        self._lock = threading.Lock()
+        self._used = 0.0
+        self._busy = 0
+
+    @property
+    def loaded(self):
+        return self._model is not None
+
+    def _get(self):
+        import time
+        with self._lock:
+            if self._model is None:
+                started = time.monotonic()
+                self._model = self._load()
+                self.log(f"whisper geladen ({time.monotonic() - started:.1f} s)")
+            self._used = time.monotonic()
+            return self._model
+
+    def warm(self):
+        """Im Hintergrund laden, falls entladen (kehrt sofort zurück)."""
+        import threading
+        if self._model is None:
+            threading.Thread(target=self._get, daemon=True, name="whisper-warm").start()
+
+    def transcribe(self, *args, **kw):
+        import time
+        model = self._get()
+        self._busy += 1
+        try:
+            segs, info = model.transcribe(*args, **kw)
+            return list(segs), info          # erst hier rechnet Whisper (Generator)
+        finally:
+            self._busy -= 1
+            self._used = time.monotonic()
+
+    def unload_if_idle(self):
+        """Regelmäßig aufrufen. -> True, wenn entladen."""
+        import gc
+        import time
+        if not self.idle_after or self._model is None or self._busy:
+            return False
+        if time.monotonic() - self._used < self.idle_after:
+            return False
+        with self._lock:
+            if self._busy or time.monotonic() - self._used < self.idle_after:
+                return False
+            self._model = None
+        gc.collect()
+        self.log("whisper entladen (Leerlauf)")
+        return True
 
 
 def transcribe(model, wav, hint=None):

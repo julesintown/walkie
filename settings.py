@@ -219,6 +219,10 @@ SCHEMA = [
             [("tiny", "tiny – sehr schnell"), ("base", "base – Standard"),
              ("small", "small – genauer"), ("medium", "medium – am genauesten, langsam")],
             restart=True),
+    Setting("WALKIE_WHISPER_UNLOAD", "int", 10, "voice", "Whisper nach … Minuten Pause entladen",
+            "Gibt den Arbeitsspeicher der Spracherkennung frei (0,3–0,8 GB), solange du nicht "
+            "redest. Beim nächsten Reden lädt sie, während du sprichst. 0 = immer geladen lassen.",
+            min=0, max=240),
     Setting("WALKIE_LANG", "choice", "de", "voice", "Sprache der Erkennung",
             "In welcher Sprache du sprichst. Automatisch: Whisper erkennt sie selbst (etwas "
             "langsamer, bei kurzen Sätzen unsicherer).", STT_LANGUAGES),
