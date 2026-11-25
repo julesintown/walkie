@@ -2166,10 +2166,12 @@ class Walkie(QWidget):
             window, most = S.get("WALKIE_ANSWER_WINDOW"), S.get("WALKIE_ANSWER_MAX")
             gap = 1.2
             if self.answer_req == TALK:
-                # freies Reden (Kopfhörer, Klick): offen bis zum zweiten Druck – oder bis
-                # silence_limit lang nichts kam. Nach 2 s Pause abzubrechen schnitt jeden ab,
-                # der kurz überlegt („mach eine zweite Session im … – äh – walkie-Repo“).
-                window, most, gap = max(window, 4.0), TALK_MAX, max(2.0, self.silence_limit)
+                # freies Reden: endet nach der Pause aus „Stille bis Absenden“ (WALKIE_SILENCE,
+                # 7 s) – oder früher per Druck/Klick. 2 s schnitten jeden ab, der kurz überlegt;
+                # „bis zum zweiten Druck“ (60 s) hing fest, weil ein Bluetooth-Headset im
+                # Telefonmodus (sein Mikro ist offen) die Play-Taste nicht als Medientaste schickt.
+                window, most = max(window, 4.0), TALK_MAX
+                gap = max(2.0, min(self.silence_limit, S.get("WALKIE_SILENCE")))
                 self.answer_voice = max(getattr(self, "answer_voice", 0), self.rec_start)
             elif self.free_speech(self.answer_req):   # Antwort auf eine Frage einer Session:
                 most, gap = TALK_MAX, 2.0             # frei formuliert, so lang wie gesprochen

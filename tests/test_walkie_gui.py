@@ -1256,8 +1256,9 @@ class WalkieTest(unittest.TestCase):
         self.assertEqual(b.read_aloud["S"][1], "Fix gebaut, alle Tests grün.")
 
     def test_free_talk_survives_a_thinking_pause(self):
-        """Freies Reden per Kopfhörer: eine Denkpause von ein paar Sekunden beendet die Aufnahme
-        nicht (vorher nach 2 s) – erst der zweite Druck oder silence_limit."""
+        """Freies Reden: eine Denkpause beendet die Aufnahme nicht (vorher nach 2 s), aber nach
+        „Stille bis Absenden“ wird gesendet – die Play-Taste kommt bei offenem Headset-Mikro
+        (Telefonmodus) oft gar nicht an."""
         import time
         from unittest.mock import Mock
         b, ev = self.b, self.ev
@@ -1267,12 +1268,12 @@ class WalkieTest(unittest.TestCase):
         Path(b.rec_file).touch()
         b.answer_req, b.silence_limit = ev.TALK, ev.HEADSET_SILENCE
         b.rec_start, b.rec_pos, b.noise = now - 12, 0, 0.001
-        b.answer_voice = now - 6                        # 6 s still: überlegt gerade
+        pause = ev.S.get("WALKIE_SILENCE")
+        b.answer_voice = now - pause + 1.5              # kurz still: überlegt gerade
         b.stop_listening = Mock()
         b.check_silence()
         b.stop_listening.assert_not_called()
-        b.rec_start = now - ev.HEADSET_SILENCE - 10
-        b.answer_voice = now - ev.HEADSET_SILENCE - 1   # wirklich nichts mehr: Schluss
+        b.answer_voice = now - pause - 0.5              # Pause aus „Stille bis Absenden“: Schluss
         b.check_silence()
         b.stop_listening.assert_called_once()
         b.rec_proc = None
