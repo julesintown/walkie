@@ -39,6 +39,32 @@ class CrashGuard(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("survived", r.stdout)
 
+    def test_hung_gui_thread_writes_all_stacks(self):
+        """Hängt der GUI-Thread (kein Herzschlag mehr), landen die Stacks in crash.log –
+        in einem eigenen Prozess, weil faulthandler prozessweit ist."""
+        code = textwrap.dedent(f"""
+            import sys, time
+            from pathlib import Path
+            sys.path.insert(0, {str(HERE)!r})
+            import crashguard
+            crashguard.HANG_SECONDS = 0.3
+            run = Path(sys.argv[1])
+            crashguard.install(lambda m: None, run)
+            crashguard.hang_heartbeat()
+            def stuck_in_device_call():
+                time.sleep(1.0)               # GUI-Thread blockiert, kein Herzschlag
+            stuck_in_device_call()
+            print("weiter")
+        """)
+        with tempfile.TemporaryDirectory() as d:
+            r = subprocess.run([sys.executable, "-c", code, d], capture_output=True, text=True,
+                               timeout=60)
+            log = (Path(d) / "crash.log").read_text(encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("weiter", r.stdout)             # Prozess läuft weiter
+        self.assertIn("Timeout", log)
+        self.assertIn("stuck_in_device_call", log)
+
     def test_alive(self):
         sys.path.insert(0, str(HERE))
         import crashguard

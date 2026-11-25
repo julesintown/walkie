@@ -3546,6 +3546,8 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     signal.signal(signal.SIGTERM, lambda *_: app.quit())
     QTimer(app, timeout=lambda: None).start(250)  # damit Strg+C greift
+    crashguard.hang_heartbeat()
+    QTimer(app, timeout=crashguard.hang_heartbeat).start(2000)   # Hänger -> Stacks in crash.log
     code = app.exec()                       # aboutToQuit hat schon aufgeräumt (cleanup)
     # Hart beenden: Hintergrund-Threads fremder Bibliotheken (z. B. der Hotkey-Listener)
     # dürfen das Beenden nicht ewig aufhalten – genau das ist passiert.

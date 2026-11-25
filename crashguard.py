@@ -3,7 +3,7 @@
 PyQt6 beendet den Prozess mit qFatal(), wenn in einem Slot eine Exception hochkommt – es sei
 denn, sys.excepthook ist ersetzt. install() ersetzt ihn (und threading.excepthook) durch
 Protokollieren, und schreibt bei echten Abstürzen (Segfault in Qt, Audio, Whisper) die
-Thread-Stacks nach <RUN>/crash.log.
+Thread-Stacks nach <RUN>/crash.log – ebenso, wenn der GUI-Thread hängt (hang_heartbeat).
 """
 import faulthandler
 import sys
@@ -67,6 +67,23 @@ def install(log, run_dir=None, notify=None):
             faulthandler.enable(_crash_file, all_threads=True)
         except (OSError, ValueError, RuntimeError):
             _crash_file = None
+
+
+HANG_SECONDS = 15
+
+
+def hang_heartbeat():
+    """Vom GUI-Thread regelmäßig aufrufen (QTimer). Kommt er HANG_SECONDS lang nicht mehr dazu,
+    schreibt faulthandler die Stacks aller Threads nach crash.log: Ein Hänger („reagiert
+    nicht“, z. B. nach dem Trennen eines Headsets) ist sonst nicht zu finden, weil weder eine
+    Exception noch ein Absturz auftritt. Einmal je Hänger; der Prozess läuft weiter."""
+    if _crash_file is None:
+        return
+    try:
+        faulthandler.cancel_dump_traceback_later()
+        faulthandler.dump_traceback_later(HANG_SECONDS, repeat=False, file=_crash_file)
+    except (OSError, ValueError, RuntimeError):
+        pass
 
 
 def alive(widget):
