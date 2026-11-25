@@ -66,6 +66,7 @@ class BrainOrder(unittest.TestCase):
 
     def test_no_wsl_probe_outside_windows(self):
         with patch.object(router, "_wsl_claude", None), \
+                patch.object(router.sys, "platform", "linux"), \
                 patch.object(router, "_run", side_effect=AssertionError("nichts starten")):
             self.assertFalse(router.wsl_claude_ok())
 

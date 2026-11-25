@@ -88,8 +88,9 @@ class PluginsTest(unittest.TestCase):
 
 class SourceTest(unittest.TestCase):
     def test_repo_checkout_is_its_own_source(self):
-        with patch.object(plugins, "HERE", Path("/home/x/walkie")):
-            self.assertEqual(plugins.source(), "/home/x/walkie")
+        here = Path("/home/x/walkie")
+        with patch.object(plugins, "HERE", here):
+            self.assertEqual(plugins.source(), str(here))      # Windows: \\home\\x\\walkie
 
     def test_plugin_cache_uses_github(self):
         cache = Path.home() / ".claude" / "plugins" / "cache" / "walkie" / "walkie" / "0.3.0"
@@ -102,6 +103,8 @@ class SourceTest(unittest.TestCase):
             self.assertFalse(plugins.codex_installed())
             (home / "config.toml").write_text('[plugins."walkie@walkie"]\nenabled = true\n')
             self.assertTrue(plugins.codex_installed())
+            (home / "config.toml").write_text('[plugins."browser@openai"]\nenabled = true\n')
+            self.assertFalse(plugins.codex_installed())
 
 
 if __name__ == "__main__":

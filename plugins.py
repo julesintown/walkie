@@ -76,11 +76,19 @@ def codex_installed():
     die Config sagt dasselbe sofort."""
     home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
     try:
-        import tomllib
-        cfg = tomllib.loads((home / "config.toml").read_text(encoding="utf-8"))
+        text = (home / "config.toml").read_text(encoding="utf-8")
     except FileNotFoundError:
         return False
-    except Exception:  # noqa: BLE001 – Python < 3.11 oder kaputte Datei
+    except OSError:
+        return None
+    try:
+        import tomllib
+    except ImportError:                       # Python 3.10: Tabellenköpfe reichen dafür
+        import re
+        return bool(re.search(r'^\s*\[plugins\.["\']?walkie@', text, re.M))
+    try:
+        cfg = tomllib.loads(text)
+    except Exception:  # noqa: BLE001 – kaputte Datei
         return None
     return any(k.startswith("walkie@") for k in cfg.get("plugins", {}))
 

@@ -1083,6 +1083,8 @@ class WalkieTest(unittest.TestCase):
                                "prompt": "x fragt: weiter?"}
         started = []
         b.answer_done.clear()
+        b.rec_proc = None                                # Zustand anderer Tests nicht erben
+        b.set_state("idle")
         with patch.object(b, "start_listening", lambda **k: started.append(k["answer"])):
             b.mic_owner = object()                       # dein letzter Satz läuft noch
             b.listen_answer("busy-q")
