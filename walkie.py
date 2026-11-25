@@ -1848,6 +1848,7 @@ class Walkie(QWidget):
             self.stop_speaking()                    # offene Anfrage: Antwort darauf anhören
             req = next(reversed(self.pending))
             self.pending[req]["tries"] = 0
+            self.pending[req]["manual"] = True       # selbst gedrückt: Nachfragen erwünscht
             self.listen_answer(req)
         else:
             self.stop_speaking()
@@ -2698,9 +2699,20 @@ class Walkie(QWidget):
             self.bus.ask.emit(req)
             self.answer_done.wait(timeout=40)   # erst danach die nächste Ansage
 
-    def listen_answer(self, req):
+    BUSY_WAIT_S = 20            # so lange auf ein belegtes Mikro warten, bevor die Frage still bleibt
+
+    def listen_answer(self, req, waited=0.0):
         dbg(f"zuhören von selbst: antwort auf {req} (versuch {self.pending.get(req, {}).get('tries', 0)})")
         if req not in self.pending or self.state == "listening":
+            self.answer_done.set()
+            return
+        if self.mic_owner or self.rec_proc or self.state == "thinking":
+            # Mikro noch belegt (z. B. dein letzter Satz wird gerade verarbeitet): kurz warten
+            # statt still aufzugeben – sonst kam nach manchen Fragen keine Aufforderung
+            if waited < self.BUSY_WAIT_S:
+                QTimer.singleShot(500, lambda: self.listen_answer(req, waited + 0.5))
+                return
+            dbg(f"zuhören: Mikro seit {waited:.0f} s belegt – {req} bleibt am Rechner")
             self.answer_done.set()
             return
         self.start_listening(silence=S.get("WALKIE_ANSWER_WINDOW"), answer=req)
@@ -2892,6 +2904,7 @@ class Walkie(QWidget):
             "detail": "", "reason": "", "answers": {}, "ts": time.time(), "text": text,
             "questions": [{"question": Speech("Welche Session?"), "options": labels, "multi": False}],
             "targets": dict(zip(labels, sids)),
+            "manual": True,      # folgt auf deinen eigenen Satz: nachfragen, nichts still verlieren
             "prompt": Speech("Meinst du {options}?", options=", ".join(labels[:-1]) + Speech(" oder ") + labels[-1]),
         }
         self.bus.state.emit("idle")
@@ -3150,7 +3163,18 @@ class Walkie(QWidget):
                 return
             if result == "repeat":
                 result = None
-            if result is None:                  # unklar -> einmal nachfragen
+            if result is None and not p.get("manual"):
+                # Von selbst zugehört, aber keine klare Antwort: einmal gefragt reicht – kein
+                # zweites Zuhören, kein „nicht verstanden“. Wer will, drückt Play.
+                self.bus.state.emit("idle")
+                dbg(f"antwort {req}: keine klare Antwort – bleibt still")
+                if p.get("kind") == "handover":
+                    self.pending.pop(req, None)
+                elif p.get("kind") == "reply" or p.get("first"):
+                    self.pending.pop(req, None)           # Session/Dialog nicht warten lassen
+                    self.write_answer(req, {"behavior": "pass"})
+                return
+            if result is None:                  # selbst gedrückt, unklar -> einmal nachfragen
                 if p.get("tries", 0) < 1 and (text or p.get("kind") == "reply"):
                     p["tries"] = 1
                     self.bus.state.emit("idle")

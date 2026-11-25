@@ -1072,6 +1072,68 @@ class WalkieTest(unittest.TestCase):
         b.check_silence()
         b.stop_listening.assert_called_once()
 
+    def test_question_waits_for_a_busy_mic_instead_of_staying_silent(self):
+        """Frage kommt, während das Mikro noch belegt ist: warten und dann zuhören – vorher
+        gab Walkie still auf, und nach manchen Fragen kam keine Aufforderung."""
+        import time
+        from unittest.mock import patch
+        b = self.b
+        b.pending["busy-q"] = {"session": "S", "who": "x", "kind": "reply", "via": "hook",
+                               "tool": "", "questions": [], "answers": {}, "ts": time.time(),
+                               "prompt": "x fragt: weiter?"}
+        started = []
+        b.answer_done.clear()
+        with patch.object(b, "start_listening", lambda **k: started.append(k["answer"])):
+            b.mic_owner = object()                       # dein letzter Satz läuft noch
+            b.listen_answer("busy-q")
+            self.assertEqual(started, [])
+            self.assertFalse(b.answer_done.is_set())     # nicht aufgegeben
+            b.mic_owner = None
+            end = time.time() + 2
+            while not started and time.time() < end:
+                self.app.processEvents()
+                time.sleep(0.02)
+        self.assertEqual(started, ["busy-q"])
+        b.pending.pop("busy-q", None)
+
+    def test_session_question_asks_once_and_closes_quietly(self):
+        """Frage einer Session, von selbst zugehört, keine klare Antwort: kein zweites Zuhören,
+        kein „nicht verstanden“; die Session wartet nicht. Selbst gedrückt: einmal nachfragen."""
+        import queue
+        b, ev = self.b, self.ev
+        b.say_q = queue.Queue()
+        spoken, asked, written = [], [], []
+        b.speak = spoken.append
+        b.bus.ask.disconnect()
+        b.bus.ask.connect(asked.append)
+        b.whisper = object()
+        old = (ev.transcribe, b.write_answer, ev.router.ask_model)
+        ev.transcribe = lambda model, wav, hint=None: "äh"
+        ev.router.ask_model = lambda *a, **k: '{"decision": "unclear"}'
+        b.write_answer = lambda req, ans: written.append((req, ans))
+        try:
+            for manual in (False, True):
+                req = f"q-{manual}"
+                b.pending[req] = {"session": "S", "who": "shop", "kind": "reply", "via": "hook",
+                                  "tool": "", "detail": "", "reason": "", "questions": [],
+                                  "answers": {}, "ts": __import__("time").time(),
+                                  "prompt": "shop fragt: weiter?", **({"manual": True} if manual else {})}
+                wav = TMP / "q.wav"
+                wav.write_bytes(b"")
+                b.answer_pipeline(str(wav), req)
+                if not manual:
+                    self.assertEqual((spoken, asked), ([], []))      # still
+                    self.assertNotIn(req, b.pending)
+                    self.assertEqual(written[-1], (req, {"behavior": "pass"}))
+                else:
+                    self.assertEqual(len(asked), 1)                  # einmal nachfragen
+                    self.assertTrue(spoken)
+                b.pending.pop(req, None)
+        finally:
+            ev.transcribe, b.write_answer, ev.router.ask_model = old
+            b.bus.ask.disconnect()
+            b.bus.ask.connect(b.listen_answer)
+
     def test_limit_offers_second_agent_and_opens_it_on_yes(self):
         """Claude-Session im Limit: einmal fragen; „ja“ öffnet den Zweitagenten im Ordner der
         Session mit dem bisherigen Stand, „nein“ öffnet nichts."""
