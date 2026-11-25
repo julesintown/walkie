@@ -229,3 +229,22 @@ test('Walkie antwortet nicht: der Sessionstart hängt nicht und der Abruf-Takt l
   await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: true })
   expect(ticking).toBe(true)
 })
+
+test('nach /reload-plugins (kein session.start): beim ersten Hook nachträglich anmelden', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  on('ui.toast', () => ({ value: undefined }) as never)
+  const fetched = engine(on, {})
+  // „denkt“ geht ohne Warten raus (void emit): weiterrufen, bis auch das angekommen ist
+  for (let i = 0; i < 20 && !bodies(fetched, '/event').some(b => b.event === 'tool'); i++) {
+    await $.tool.call({ tool: 'Read', file_path: '/x' } as never)
+  }
+  expect(bodies(fetched, '/event')[0]).toMatchObject({ event: 'ready', session: 'S1', project: 'shop' })
+})
+
+test('claude -p (session.start nicht interaktiv): auch später keine Anmeldung', async ($, on) => {
+  on('tool.call', () => ({ result: 'ok' }) as never)
+  const fetched = engine(on, {})
+  await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: false })
+  await $.tool.call({ tool: 'Read', file_path: '/x' } as never)
+  expect(bodies(fetched, '/event')).toHaveLength(0)
+})

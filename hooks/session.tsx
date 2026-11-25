@@ -306,6 +306,7 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   // die nach Sekunden wieder weg sind.
   sid = ''
   windowsRun = undefined
+  lateStart = true                   // Start gesehen: nichts nachholen (auch nicht bei claude -p)
   if (!interactive || (await $.env.get('WALKIE_SESSION'))) return
   await setupHint($).catch(() => undefined)
   sid = await $.session.id()
@@ -323,9 +324,22 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   await ensureAnnounced($)
 }
 
+let lateStart = false
+
+/** Nach /reload-plugins läuft das Plugin als neue Instanz, ohne dass die Engine noch einmal
+ *  session.start meldet: Es kannte seine Session nicht und blieb ganz stumm (keine Ereignisse,
+ *  kein Postfach). Dann beim ersten Hook einmal nachholen. Nur, wenn die Session schon einen
+ *  Prompt hatte (interaktiv) – Hilfsabfragen des Walkies schließt sessionStart selbst aus. */
+async function ensureStarted($: EngineInterface) {
+  if (sid || lateStart) return
+  await sessionStart($, true)
+  if (sid) $.ui.toast('🎧 Walkie: Session nach dem Neuladen wieder angemeldet', { timeoutMs: 8000 })
+}
+
 export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
+    await ensureStarted($).catch(() => undefined)
     const ours = e.origin?.kind === 'plugin' && voiceTurn
     // gesprochene Sätze bekommen den Hinweis für Claude (nur das Modell liest ihn)
     const res = await next(ours ? { ...e, context: [...(e.context ?? []), VOICE_CONTEXT + (replyLanguage ? ` Reply language: ${replyLanguage}.` : '')] } : e)
@@ -343,6 +357,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
+    await ensureStarted($).catch(() => undefined)
     const now = Date.now()
     if (now - lastTool > 5000) {             // „denkt noch“ – höchstens alle 5 s melden
       lastTool = now
