@@ -18,14 +18,14 @@ def remote():
     r = keys.WinRemote.__new__(keys.WinRemote)
     r.wm = SimpleNamespace(MediaPlaybackStatus=SimpleNamespace(PLAYING="playing", STOPPED="stopped"))
     r.smtc = SimpleNamespace(is_enabled=False, playback_status=None)
-    r.log, r.owned, r.dev, r.hold_until = (lambda m: None), False, None, 0.0
+    r.log, r.owned, r.hold_until, r.unwanted_since = (lambda m: None), False, 0.0, 0.0
+    r.track = SimpleNamespace(set=lambda on: None)
     return r
 
 
 class WinMediaKeys(unittest.TestCase):
     def setUp(self):
-        for p in (patch.object(keys, "silent_track", return_value=None),
-                  patch.object(keys, "learning", return_value=False),
+        for p in (patch.object(keys, "learning", return_value=False),
                   patch.object(keys.S, "get", side_effect=lambda k: "smart")):
             p.start()
             self.addCleanup(p.stop)
@@ -57,6 +57,36 @@ class WinMediaKeys(unittest.TestCase):
             r.hold_until = time.time() - 1
             r.tick(busy=False)
             self.assertTrue(r.owned)
+
+    def test_short_glance_elsewhere_keeps_the_keys(self):
+        """Kurz ein anderes Fenster vorne: erst nach RELEASE_AFTER abgeben (sonst ging die
+        Tonspur ständig auf und zu)."""
+        r = remote()
+        with patch.object(keys, "win_foreground_exe", return_value="windowsterminal.exe"):
+            r.tick(busy=False)
+        self.assertTrue(r.owned)
+        with patch.object(keys, "win_foreground_exe", return_value="pythonw.exe"):
+            r.tick(busy=False)
+            self.assertTrue(r.owned)
+            r.unwanted_since = time.time() - r.RELEASE_AFTER - 1
+            r.tick(busy=False)
+            self.assertFalse(r.owned)
+
+    def test_silent_track_never_blocks_the_caller(self):
+        """Kopfhörer gewechselt: miniaudios close() hängt für immer – der Aufrufer (GUI-Thread)
+        darf davon nichts merken."""
+        import threading
+        stuck = threading.Event()
+
+        class Dev:
+            def stop(self): pass
+            def close(self): stuck.wait(5)          # hängt (im Test: 5 s)
+        t = keys.SilentTrack(lambda m: None)
+        t.dev = Dev()
+        started = time.time()
+        t.set(False)
+        self.assertLess(time.time() - started, 0.5)
+        stuck.set()
 
     def test_smtc_buttons_map_to_headset_keys(self):
         self.assertEqual(keys.SMTC_KEYS["PAUSE"], "PLAYPAUSE")

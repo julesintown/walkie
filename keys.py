@@ -193,7 +193,7 @@ def win_foreground_exe():
 
 class WinRemote:
     """Walkie als Wiedergabe in der Windows-Mediensteuerung (nur solange er die Tasten will)."""
-
+    RELEASE_AFTER = 5.0
     def __init__(self, on_key, log):
         import winrt.windows.media as wm
         import winrt.windows.media.playback as wp
@@ -211,8 +211,9 @@ class WinRemote:
         smtc.add_button_pressed(self._pressed)
         smtc.is_enabled = False
         self.owned = False
-        self.dev = None
+        self.track = SilentTrack(log)
         self.hold_until = 0.0          # so lange nicht übernehmen (nach einer Musik-Taste)
+        self.unwanted_since = 0.0
         log("tasten: windows-mediensteuerung")
 
     def _pressed(self, _sender, args):
@@ -227,26 +228,32 @@ class WinRemote:
     def own(self, on):
         if on == self.owned:
             return
+        self.track.set(on)                           # Windows wertet nur echte Wiedergabe als aktiv
         if on:
-            self.dev = silent_track(self.log)        # Windows wertet nur echte Wiedergabe als aktiv
             self.smtc.is_enabled = True
             self.smtc.playback_status = self.wm.MediaPlaybackStatus.PLAYING
         else:
             self.smtc.playback_status = self.wm.MediaPlaybackStatus.STOPPED
             self.smtc.is_enabled = False
-            stop_track(self.dev)
-            self.dev = None
         self.owned = on
         self.log(f"tasten: windows-medientasten {'übernommen' if on else 'freigegeben'}")
 
     def tick(self, busy):
         """Jede Sekunde aus dem Begleiter: Tasten übernehmen oder freigeben."""
-        if time.time() < self.hold_until and not busy:
-            want = False
-        elif S.get("WALKIE_MAC_KEYS") == "always" or busy or learning():
-            want = True
-        else:
-            want = win_foreground_exe() in WIN_TERMINALS
+        now = time.time()
+        if now < self.hold_until and not busy:
+            self.own(False)                          # Musik-Taste weiterreichen: sofort
+            return
+        want = (S.get("WALKIE_MAC_KEYS") == "always" or busy or learning()
+                or win_foreground_exe() in WIN_TERMINALS)
+        # erst nach ein paar Sekunden ohne Bedarf abgeben: ein kurzer Blick in ein anderes
+        # Fenster (oder ein Klick auf die Figur) ließ die Tonspur sonst ständig auf- und zugehen
+        if want:
+            self.unwanted_since = 0.0
+        elif self.owned:
+            self.unwanted_since = self.unwanted_since or now
+            if now - self.unwanted_since < self.RELEASE_AFTER:
+                return
         self.own(want)
 
     def release(self, seconds=4.0):
@@ -258,29 +265,62 @@ class WinRemote:
 win_remote = None
 
 
-def silent_track(log):
-    """Stille Tonspur (s16 mono): wer keinen Ton ausgibt, ist für macOS und Windows keine
-    laufende Wiedergabe und bekommt keine Kopfhörertasten."""
-    try:
-        import miniaudio
+class SilentTrack:
+    """Stille Tonspur (s16 mono): wer keinen Ton ausgibt, ist für macOS und Windows keine laufende
+    Wiedergabe und bekommt keine Kopfhörertasten.
 
-        def silence():
-            need = yield b""
-            while True:
-                need = yield b"\x00" * (need * 2)
-        dev = miniaudio.PlaybackDevice(output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1,
-                                       sample_rate=22050, buffersize_msec=200, app_name="Walkie")
-        gen = silence()
-        next(gen)
-        dev.start(gen)
-        return dev
-    except Exception as ex:  # noqa: BLE001
-        log(f"tasten: stille tonspur geht nicht ({ex})")
-        return None
+    Öffnen und Schließen laufen in eigenen Threads: Verschwindet das Ausgabegerät (Kopfhörer
+    gewechselt), hängt miniaudios close() für immer – im GUI-Thread fror das die ganze Figur ein
+    (gemessen unter Windows). So bleibt höchstens dieser eine Hilfs-Thread stehen."""
 
+    def __init__(self, log):
+        self.log = log
+        self.lock = threading.Lock()
+        self.dev = None
+        self.want = False
 
-def stop_track(dev):
-    if dev is not None:
+    def set(self, on):
+        self.want = on
+        threading.Thread(target=self._apply, daemon=True, name="silent-track").start()
+
+    def _apply(self):
+        if not self.want:
+            with self.lock:
+                dev, self.dev = self.dev, None
+            self._close(dev)
+            return
+        with self.lock:
+            if self.dev is not None:
+                return
+        dev = self._open()
+        with self.lock:
+            if self.want and self.dev is None:
+                self.dev, dev = dev, None
+        self._close(dev)                          # inzwischen nicht mehr gewollt
+
+    def _open(self):
+        try:
+            import miniaudio
+
+            def silence():
+                need = yield b""
+                while True:
+                    need = yield b"\x00" * (need * 2)
+            dev = miniaudio.PlaybackDevice(output_format=miniaudio.SampleFormat.SIGNED16,
+                                           nchannels=1, sample_rate=22050, buffersize_msec=200,
+                                           app_name="Walkie")
+            gen = silence()
+            next(gen)
+            dev.start(gen)
+            return dev
+        except Exception as ex:  # noqa: BLE001
+            self.log(f"tasten: stille tonspur geht nicht ({ex})")
+            return None
+
+    @staticmethod
+    def _close(dev):
+        if dev is None:
+            return
         try:
             dev.stop()
             dev.close()
@@ -413,7 +453,7 @@ class MacRemote:
     def __init__(self, log):
         self.log = log
         self.owned = False
-        self.dev = None
+        self.track = SilentTrack(log)
         self.hold_until = 0.0          # so lange nicht übernehmen (nach einer Musik-Taste)
 
     def frontmost(self):
@@ -424,38 +464,17 @@ class MacRemote:
         except Exception:  # noqa: BLE001
             return ""
 
-    def _silence(self):
-        need = yield b""
-        while True:
-            need = yield b"\x00" * (need * 2)          # s16 mono: 2 Byte je Frame
-
     def own(self, on):
         if on == self.owned:
             return
         from MediaPlayer import (MPNowPlayingInfoCenter, MPNowPlayingPlaybackStatePlaying,
                                  MPNowPlayingPlaybackStateStopped)
         center = MPNowPlayingInfoCenter.defaultCenter()
+        self.track.set(on)                           # nie im GUI-Thread öffnen/schließen
         if on:
-            try:
-                import miniaudio
-                self.dev = miniaudio.PlaybackDevice(
-                    output_format=miniaudio.SampleFormat.SIGNED16, nchannels=1,
-                    sample_rate=22050, buffersize_msec=200, app_name="Walkie")
-                gen = self._silence()
-                next(gen)
-                self.dev.start(gen)
-            except Exception as ex:  # noqa: BLE001
-                self.log(f"tasten: stille tonspur geht nicht ({ex})")
             center.setNowPlayingInfo_({"title": S.get("WALKIE_NAME")})
             center.setPlaybackState_(MPNowPlayingPlaybackStatePlaying)
         else:
-            if self.dev is not None:
-                try:
-                    self.dev.stop()
-                    self.dev.close()
-                except Exception:  # noqa: BLE001
-                    pass
-                self.dev = None
             center.setPlaybackState_(MPNowPlayingPlaybackStateStopped)
         self.owned = on
         self.log(f"tasten: macos-medientasten {'übernommen' if on else 'freigegeben'}")
