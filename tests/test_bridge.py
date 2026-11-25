@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -112,6 +113,52 @@ class BridgeTest(unittest.TestCase):
         self.b.stop()
         t.join(5)
         self.assertEqual(out.get("r"), {"behavior": "pass"})
+
+
+    def test_session_thinks_for_the_walkie(self):
+        """Nur die Desktop-App installiert: eine offene Session beantwortet Denkaufgaben."""
+        self.assertFalse(self.b.can_think())
+        self.req("/inbox?session=a&ack=1")              # altes Plugin: denkt nicht mit
+        self.assertFalse(self.b.can_think())
+        self.assertIsNone(self.req("/inbox?session=a&ack=1&think=1")["think"])
+        self.assertTrue(self.b.can_think())
+        out = {}
+        t = threading.Thread(target=lambda: out.update(r=self.b.think("Wohin?", "haiku", 5)))
+        t.start()
+        job = None
+        for _ in range(50):
+            job = self.req("/inbox?session=a&ack=1&think=1")["think"]
+            if job:
+                break
+            time.sleep(0.05)
+        self.assertEqual((job["prompt"], job["model"], job["timeoutMs"]), ("Wohin?", "haiku", 5000))
+        # schon abgeholt: keine zweite Session bekommt dieselbe Aufgabe
+        self.assertIsNone(self.req("/inbox?session=b&ack=1&think=1")["think"])
+        self.req("/think", {"id": job["id"], "text": "Session shop"})
+        t.join(5)
+        self.assertEqual(out.get("r"), "Session shop")
+
+    def test_think_error_and_silence_raise(self):
+        def answer(text=None, error=None):
+            for _ in range(50):
+                job = self.b.claim_think()
+                if job:
+                    self.b.think_result({"id": job["id"], "text": text, "error": error})
+                    return
+                time.sleep(0.02)
+        threading.Thread(target=answer, kwargs={"error": "api-error"}).start()
+        with self.assertRaisesRegex(RuntimeError, "api-error"):
+            self.b.think("x", "haiku", 3)
+        with self.assertRaisesRegex(RuntimeError, "keine Session"):
+            self.b.think("x", "haiku", 0.1)
+
+    def test_router_uses_a_thinking_session_first(self):
+        calls = []
+        with unittest.mock.patch.object(router, "THINK",
+                                        lambda p, m, t: calls.append((p, m)) or "ok"),                 unittest.mock.patch.object(router, "CAN_THINK", lambda: True),                 unittest.mock.patch("shutil.which", lambda *a, **k: None),                 unittest.mock.patch.object(router, "wsl_claude_ok", lambda: False):
+            self.assertEqual(router.brains()[0], "session")
+            self.assertEqual(router.ask_model("Frage", None, None, 20, claude_model="haiku"), "ok")
+        self.assertEqual(calls, [("Frage", "haiku")])
 
 
 class RouterTest(unittest.TestCase):

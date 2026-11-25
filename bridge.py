@@ -6,6 +6,7 @@ liest. Plattformneutral (nur Standardbibliothek), keine Dateien als Nachrichtenk
   POST /event            Ereignis einer Session -> Warteschlange (GUI-Thread holt ab)
   GET  /inbox?session=X  gesprochene Sätze für Session X (werden dabei entnommen)
   POST /ask              Freigabe/Rückfrage: wartet bis zur Antwort (oder Zeitlimit)
+  POST /think            Antwort einer Session auf eine Denkaufgabe des Walkies (think())
   GET  /health
 """
 from dictations import Dictations
@@ -40,6 +41,7 @@ class Bridge:
         self.events = queue.Queue()          # dicts, vom GUI-Thread abgeholt
         self.dictations = Dictations(run_dir)
         self.waiting = {}                     # req -> [threading.Event, answer]
+        self.thinks = {}                      # id -> Denkaufgabe für eine Session (think())
         self.sessions = {}                    # session -> {project, cwd, prompt, text, ts}
         self.ask_wait = ask_wait
         self.lock = threading.Lock()
@@ -94,10 +96,13 @@ class Bridge:
                 if url.path == "/inbox":
                     q = parse_qs(url.query)
                     sid = (q.get("session") or [""])[0]
-                    bridge.touch(sid, (q.get("project") or [""])[0], (q.get("cwd") or [""])[0])
+                    thinks = q.get("think") == ["1"]
+                    bridge.touch(sid, (q.get("project") or [""])[0], (q.get("cwd") or [""])[0],
+                                 thinks)
                     if q.get("ack") == ["1"]:
                         return self._reply(200, {"message": bridge.dictations.first(sid),
-                                                 "reply_language": lang()})
+                                                 "reply_language": lang(),
+                                                 "think": bridge.claim_think() if thinks else None})
                     return self._reply(200, {"texts": bridge.take_inbox(sid)})
                 self._reply(404)
 
@@ -114,6 +119,9 @@ class Bridge:
                     return self._reply(200, {"ok": True})
                 if path == "/ask":
                     return self._reply(200, bridge.ask(data))
+                if path == "/think":
+                    bridge.think_result(data)
+                    return self._reply(200, {"ok": True})
                 if path == "/terminal" and bridge.on_terminal:
                     bridge.on_terminal()
                     return self._reply(200, {"ok": True})
@@ -157,6 +165,8 @@ class Bridge:
             pass
         for ev, _ in list(self.waiting.values()):
             ev.set()                          # wartende Freigaben freigeben (-> normaler Dialog)
+        for job in list(self.thinks.values()):
+            job["ev"].set()                   # wartende Denkaufgaben: ohne Antwort zurück
         if self.httpd:
             self.httpd.shutdown()
             self.httpd.server_close()
@@ -224,14 +234,16 @@ class Bridge:
         with self.lock:
             return {k: dict(v) for k, v in self.sessions.items() if now - v["ts"] < max_age}
 
-    def touch(self, sid, project="", cwd=""):
+    def touch(self, sid, project="", cwd="", thinks=False):
         """Lebenszeichen einer Session (Postfach-Abruf) – meldet sie auch nach einem Neustart
-        des Walkies sofort wieder an."""
+        des Walkies sofort wieder an. thinks: ihr Plugin übernimmt Denkaufgaben (think())."""
         if not sid:
             return
         with self.lock:
             s = self.sessions.setdefault(sid, {})
             s["ts"] = time.time()
+            if thinks:
+                s["think_ts"] = s["ts"]
             if project:
                 s["project"] = project
             if cwd:
@@ -244,6 +256,57 @@ class Bridge:
 
     def take_inbox(self, sid):
         return self.dictations.take_legacy(sid)
+
+    # ---------------- Denken über eine Session ----------------
+    # Ohne eigenes, angemeldetes `claude` (nur die Claude-Desktop-App installiert: deren
+    # claude.exe ist außerhalb der App nicht angemeldet) denkt der Walkie über eine offene
+    # Session. Ihr Plugin holt die Aufgabe mit dem Postfach-Abruf ab, fragt das Modell mit der
+    # Anmeldung der Session ($.model.complete) und schickt die Antwort an POST /think.
+    THINK_CLAIM_S = 8                  # so lange gehört eine abgeholte Aufgabe dieser Session
+
+    def can_think(self, max_age=5):
+        """Ruft gerade eine Session mit denkfähigem Plugin ihr Postfach ab?"""
+        now = time.time()
+        with self.lock:
+            return any(now - s.get("think_ts", 0) < max_age for s in self.sessions.values())
+
+    def think(self, prompt, model, timeout):
+        """Eine Aufgabe, eine Textantwort – blockiert bis zur Antwort. RuntimeError, wenn keine
+        Session antwortet oder das Modell nicht antworten konnte."""
+        jid = f"t{time.time_ns()}"
+        ev = threading.Event()
+        with self.lock:
+            self.thinks[jid] = {"ev": ev, "claimed": 0.0, "result": None,
+                                "job": {"id": jid, "prompt": prompt, "model": model,
+                                        "timeoutMs": int(timeout * 1000)}}
+        ev.wait(timeout=timeout + 2)
+        with self.lock:
+            job = self.thinks.pop(jid, {})
+        res = job.get("result")
+        if not isinstance(res, dict):
+            raise RuntimeError("keine Session hat geantwortet")
+        if res.get("error") or not str(res.get("text") or "").strip():
+            raise RuntimeError(str(res.get("error") or "leere Antwort")[:200])
+        return str(res["text"])
+
+    def claim_think(self):
+        """Nächste offene Aufgabe für die abrufende Session (oder None). Antwortet die Session
+        nicht binnen THINK_CLAIM_S, darf eine andere sie übernehmen."""
+        now = time.time()
+        with self.lock:
+            for job in self.thinks.values():
+                if job["result"] is None and now - job["claimed"] > self.THINK_CLAIM_S:
+                    job["claimed"] = now
+                    return job["job"]
+        return None
+
+    def think_result(self, data):
+        with self.lock:
+            job = self.thinks.get(str(data.get("id") or ""))
+            if not job or job["result"] is not None:
+                return
+            job["result"] = {"text": data.get("text"), "error": data.get("error")}
+            job["ev"].set()
 
     # ---------------- Freigaben ----------------
     def ask(self, data):

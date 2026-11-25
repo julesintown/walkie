@@ -313,6 +313,11 @@ def judge_answer(situation, text, env=None, cwd=None, model="haiku", log=lambda 
         return None
 
 
+# Denken über eine offene Session (bridge.Bridge): vom Walkie gesetzt. THINK(prompt, model,
+# timeout) -> Text; CAN_THINK() -> ruft gerade eine Session mit denkfähigem Plugin ab?
+THINK = None
+CAN_THINK = None
+
 BRAIN_BINS = {"claude": ("WALKIE_CLAUDE_BIN", "claude"), "codex": ("WALKIE_CODEX_BIN", "codex"),
               "antigravity": ("WALKIE_AGY_BIN", "agy"), "gemini": ("WALKIE_GEMINI_BIN", "gemini")}
 
@@ -343,6 +348,10 @@ def brains(env=None):
         # Windows: das Claude Code aus WSL, gleich nach einem Windows-Claude (das oft fehlt
         # oder nicht angemeldet ist) und vor den langsameren anderen
         found.insert(found.index("claude") + 1 if "claude" in found else 0, "claude-wsl")
+    if THINK and CAN_THINK and CAN_THINK():
+        # Eine offene Claude-Session denkt mit: schon angemeldet (auch, wenn nur die
+        # Desktop-App installiert ist), ohne Programmstart – vor jedem Kommandozeilenprogramm
+        found.insert(0, "session")
     # Im Menü gewählt: zuerst dieses – die anderen bleiben Ersatz, wenn es ausfällt
     if pref in found:
         found.remove(pref)
@@ -390,7 +399,9 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
     for brain in order:
         started = time.monotonic()
         try:
-            if brain == "codex":
+            if brain == "session":
+                out = THINK(prompt, claude_model or settings.get("WALKIE_SUMMARY_MODEL"), timeout)
+            elif brain == "codex":
                 out = _codex(prompt, env, cwd, timeout, settings.get("WALKIE_CODEX_MODEL"))
             elif brain in ("antigravity", "gemini"):
                 out = _print_mode(brain, prompt, env, cwd, timeout)

@@ -820,6 +820,8 @@ class Walkie(QWidget):
         self.term = Terminal()
         # Brücke zum Plugin-Mod jeder Claude-Session (lokaler HTTP-Dienst, plattformneutral)
         self.bridge = Bridge(str(RUN), ask_wait=lambda: S.get("WALKIE_ASK_WAIT"))
+        # offene Claude-Sessions denken mit (ihre Anmeldung, kein eigenes `claude` nötig)
+        router.THINK, router.CAN_THINK = self.bridge.think, self.bridge.can_think
         self.bus.quit.connect(QApplication.instance().quit, Qt.ConnectionType.QueuedConnection)
         self.bus.show.connect(lambda: (self.bring_back("walkie-befehl"), self.keep_on_screen()),
                               Qt.ConnectionType.QueuedConnection)

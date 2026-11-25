@@ -199,11 +199,13 @@ async function pollInbox($: EngineInterface) {
     const q = `session=${encodeURIComponent(sid)}&project=${encodeURIComponent(project)}` +
       `&cwd=${encodeURIComponent(cwd)}`
     const session = sid
-    const got = (await call($, `/inbox?${q}&ack=1`)) as
-      | { message?: { id: string; text: string }; texts?: string[]; reply_language?: string }
+    const got = (await call($, `/inbox?${q}&ack=1&think=1`)) as
+      | { message?: { id: string; text: string }; texts?: string[]; reply_language?: string;
+          think?: ThinkJob | null }
       | undefined
     if (session !== sid) return
     replyLanguage = got?.reply_language ?? ''
+    if (got?.think) void think($, got.think).catch(() => undefined)
     const item = got?.message
     if (item) {
       const key = `last-delivery-${session}`
@@ -235,6 +237,25 @@ async function pollInbox($: EngineInterface) {
   } finally {
     if (gen === pollGen) polling = false   // ein spät endender, hängender Abruf gibt nichts frei
   }
+}
+
+type ThinkJob = { id: string; prompt: string; model?: string; timeoutMs?: number }
+
+/** Denkaufgabe des Walkies (Weiterleiten, Antworten, Vorlesetexte) mit der Anmeldung dieser
+ *  Session beantworten: Auf einem Rechner mit nur der Claude-Desktop-App gibt es sonst kein
+ *  angemeldetes `claude`, das der Walkie selbst aufrufen könnte. */
+async function think($: EngineInterface, job: ThinkJob) {
+  let answer: { text?: string; error?: string }
+  try {
+    const r = await $.model.complete({
+      model: job.model || 'haiku', prompt: job.prompt, maxTokens: 2048,
+      ...(job.timeoutMs && job.timeoutMs > 0 ? { timeoutMs: Math.round(job.timeoutMs) } : {}),
+    })
+    answer = r.isAnswered ? { text: r.text } : { error: String(r.reason ?? 'keine Antwort') }
+  } catch (error) {
+    answer = { error: String((error as Error)?.message ?? error).slice(0, 200) }
+  }
+  await call($, '/think', { id: job.id, ...answer })
 }
 
 /** Kurzbeschreibung einer Freigabe zum Vorlesen (wie hook.detail). */
