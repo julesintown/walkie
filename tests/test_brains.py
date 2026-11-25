@@ -32,6 +32,45 @@ class BrainOrder(unittest.TestCase):
                 patch("shutil.which", which_only("claude", "gemini", "codex")):
             self.assertEqual(router.brains(), ["gemini", "claude", "codex"])
 
+    def test_windows_uses_claude_from_wsl_after_windows_claude(self):
+        """Windows: das Claude aus WSL denkt mit – gleich nach einem (oft nicht angemeldeten)
+        Windows-Claude, vor agy. Andere Systeme starten dafür nichts."""
+        calls = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            out = "2.1.0\n" if "--version" in argv else "pong\n"
+            return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+
+        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="auto"), \
+                patch("shutil.which", which_only("claude", "agy", "wsl")), \
+                patch.object(router, "_wsl_claude", None), \
+                patch.object(router.sys, "platform", "win32"), \
+                patch.object(router, "_run", side_effect=fake_run):
+            self.assertEqual(router.brains(), ["claude", "claude-wsl", "antigravity"])
+            router._brain_down["claude"] = 10 ** 12       # Windows-Claude gerade kaputt
+            try:
+                self.assertEqual(router.ask_model("ping", {}, None, 20), "pong\n")
+            finally:
+                router._brain_down.clear()
+        self.assertEqual(calls[-1][:6], router.WSL_CLAUDE)
+        self.assertIn("-p", calls[-1])
+
+    def test_menu_choice_claude_in_wsl(self):
+        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="claude-wsl"), \
+                patch("shutil.which", which_only("claude", "agy")), \
+                patch.object(router, "wsl_claude_ok", return_value=True):
+            self.assertEqual(router.brains(), ["claude-wsl"])
+        with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="claude"), \
+                patch("shutil.which", which_only("claude", "agy")), \
+                patch.object(router, "wsl_claude_ok", return_value=True):
+            self.assertEqual(router.brains(), ["claude"])          # „Claude“ = nur Windows-Claude
+
+    def test_no_wsl_probe_outside_windows(self):
+        with patch.object(router, "_wsl_claude", None), \
+                patch.object(router, "_run", side_effect=AssertionError("nichts starten")):
+            self.assertFalse(router.wsl_claude_ok())
+
     def test_explicit_brain_only(self):
         with patch.dict(os.environ, WALKIE_AGENT="claude", WALKIE_BRAIN="codex"), \
                 patch("shutil.which", which_only("claude", "codex")):

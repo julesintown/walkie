@@ -11,6 +11,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -277,6 +278,8 @@ def brains(env=None):
     import settings
     pref = settings.get("WALKIE_BRAIN")
     agent = settings.get("WALKIE_AGENT")
+    if pref == "claude-wsl" and wsl_claude_ok():
+        return ["claude-wsl"]                 # im Menü gewählt (sonst wie „Automatisch“)
     order = ["claude", "codex", "antigravity", "gemini"]
     first = pref if pref in BRAIN_BINS else agent if agent in BRAIN_BINS else None
     if first:
@@ -285,7 +288,34 @@ def brains(env=None):
         if pref in BRAIN_BINS:
             order = [pref]
     path = (env or os.environ).get("PATH")
-    return [b for b in order if shutil.which(brain_bin(b), path=path)]
+    found = [b for b in order if shutil.which(brain_bin(b), path=path)]
+    if pref not in BRAIN_BINS and wsl_claude_ok():
+        # Windows: das Claude Code aus WSL, gleich nach einem Windows-Claude (das oft fehlt
+        # oder nicht angemeldet ist) und vor den langsameren anderen
+        found.insert(found.index("claude") + 1 if "claude" in found else 0, "claude-wsl")
+    return found
+
+
+# Windows: Claude Code aus der WSL-Distribution. Login-Shell, damit ~/.local/bin im PATH ist.
+WSL_CLAUDE = ["wsl.exe", "-e", "bash", "-lc", 'exec claude "$@"', "claude"]
+_wsl_claude = None
+
+
+def wsl_claude_ok():
+    """Gibt es unter Windows ein Claude Code in WSL? Einmal geprüft (kostet ~1 s). Auf allen
+    anderen Systemen und ohne WSL: False, ohne etwas zu starten."""
+    global _wsl_claude
+    if _wsl_claude is None:
+        _wsl_claude = False
+        import shutil
+        if sys.platform == "win32" and shutil.which("wsl"):
+            try:
+                r = _run([*WSL_CLAUDE, "--version"], capture_output=True, timeout=30,
+                         stdin=subprocess.DEVNULL)
+                _wsl_claude = r.returncode == 0 and bool((r.stdout or "").strip())
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return _wsl_claude
 
 
 BRAIN_PAUSE = 300                 # s: a failed brain (e.g. usage limit) is skipped this long
@@ -311,7 +341,7 @@ def ask_model(prompt, env, cwd, timeout, claude_model=None, log=lambda m: None):
                                "--tools", "", "--no-session-persistence",
                                # ohne Werkzeuge braucht es keine MCP-Server: ~1 s schnellerer Start
                                "--strict-mcp-config"], prompt, env, cwd,
-                              timeout)
+                              timeout, launcher=WSL_CLAUDE if brain == "claude-wsl" else None)
             _brain_down.pop(brain, None)
             log(f"{brain}: {time.monotonic() - started:.1f} s")
             return out
@@ -389,14 +419,15 @@ def _without_newer_flags(args):
     return out
 
 
-def _claude(args, prompt, env, cwd, timeout):
+def _claude(args, prompt, env, cwd, timeout, launcher=None):
     args = [*args, *LEAN]
-    r = _run([brain_bin("claude"), "-p", *args], input=prompt, capture_output=True,
+    cmd = launcher or [brain_bin("claude")]
+    r = _run([*cmd, "-p", *args], input=prompt, capture_output=True,
              timeout=timeout, env=env, cwd=cwd)
     err = (r.stderr or r.stdout or "").strip()
     if r.returncode != 0 and "unknown option" in err and _without_newer_flags(args) != args:
         # ältere Claude-Code-Versionen (z. B. 1.0.x unter Windows) kennen nicht alle Flags
-        r = _run([brain_bin("claude"), "-p", *_without_newer_flags(args)], input=prompt,
+        r = _run([*cmd, "-p", *_without_newer_flags(args)], input=prompt,
                  capture_output=True, timeout=timeout, env=env, cwd=cwd)
         err = (r.stderr or r.stdout or "").strip()
     if r.returncode != 0:

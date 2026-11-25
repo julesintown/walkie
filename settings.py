@@ -237,8 +237,8 @@ SCHEMA = [
             "Entscheidet, wohin Gesagtes geht, versteht Antworten und bereitet Vorlesetexte auf. "
             "Automatisch: das Modell des Hauptagenten; fällt es aus (z. B. Nutzungslimit), ein "
             "anderer installierter Agent.",
-            [("auto", "Automatisch"), ("claude", "Claude"), ("codex", "Codex"),
-             ("antigravity", "Antigravity"), ("gemini", "Gemini")]),
+            [("auto", "Automatisch"), ("claude", "Claude"), ("claude-wsl", "Claude in WSL (Windows)"),
+             ("codex", "Codex"), ("antigravity", "Antigravity"), ("gemini", "Gemini")]),
     Setting("WALKIE_SUMMARY_MODEL", "choice", "haiku", "voice", "Claude-Modell fürs Denken",
             "", [("haiku", "Haiku – schnell, günstig"), ("sonnet", "Sonnet"),
                  ("opus", "Opus")]),
