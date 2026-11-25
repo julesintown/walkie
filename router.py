@@ -223,8 +223,10 @@ Rules by "kind":
   "multi": false at most one. If the user answers with something that is not an option, use
   "values": [] and put the answer in the user's words into "other". "cancel" when the user wants
   to drop the question altogether. "unclear" for empty or meaningless speech.
-- "reply": the agent asked the user an open question. "pass" when the user wants to skip it or
-  answer later at the computer; "reply" otherwise; "unclear" for empty or meaningless speech.
+- "reply": the agent asked the user an open question. "pass" ONLY when the user explicitly
+  declines to answer by voice (wants to skip it, or says they will answer at the computer);
+  "reply" otherwise, including any statement about what to do or when ("let's test it first",
+  "not yet", "later"): the agent must hear it. "unclear" for empty or meaningless speech.
 - "permission" with "confirmation_code": a critical command. "allow" ONLY when the user clearly
   says this exact number as a confirmation (digits, number words in any language, or digit by
   digit), and then also set "code_said": true. Consent without the number, or with another

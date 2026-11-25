@@ -72,6 +72,7 @@ WANDER_EVERY_MS = 12000
 ACTION_CHANCE = 0.15
 MIC_DEAD = 0.002                     # darunter liefert das Mikro praktisch nur Nullen
 QUIET_PEAK = 0.008                   # absoluter Ersatz, wenn die adaptive Erkennung nichts meldet
+VOICE_CONTRAST = 8                   # lautestes / leisestes Zehntel der Aufnahme: ab hier ist Sprache drin
 CLIMB_CHANCE = 0.12                  # je Wander-Runde: zur Bildschirmkante laufen und hochklettern
 LINUX = sys.platform.startswith("linux")   # Bluetooth-Profil, MPRIS, evdev: nur Linux
 OKAY_TAIL = 1.5                      # s: Kopfhörer spielt das „Okay“ verzögert aus
@@ -2087,6 +2088,25 @@ class Walkie(QWidget):
             self.term.kitty("send-key", "enter").check_returncode()
             self.prompt_seen.wait(timeout=8)
 
+    @staticmethod
+    def voice_contrast(path):
+        """Lautestes 0,1-s-Stück der Aufnahme geteilt durch ihr leises Zehntel. Ein leises Mikro
+        (RDP, falscher Eingang) bleibt unter QUIET_PEAK, und wer sofort losredet, verfälscht das
+        Grundrauschen der ersten 0,6 s. Sprache hebt sich trotzdem deutlich vom eigenen Rauschen
+        ab (gemessen: 12- bis 1600-fach), Stille kaum. 0 = nichts zu messen."""
+        import numpy as np
+        try:
+            a = load_wav(path)
+        except Exception:  # noqa: BLE001 – Datei fehlt oder ist noch leer
+            return 0.0
+        n = len(a) // 1600
+        if n < 5:
+            return 0.0
+        frames = a[:n * 1600].reshape(n, 1600)
+        rms = np.sqrt((frames * frames).mean(axis=1))
+        floor = float(np.percentile(rms, 10))
+        return float(rms.max()) / max(floor, 1e-4)   # digitale Stille (Nullen): kein Riesen-Verhältnis aus Rauschkrümeln
+
     def free_speech(self, answer):
         """Freies Reden oder die Antwort auf eine Frage einer Session (kind "reply"): so lange
         zuhören, wie gesprochen wird (bis TALK_MAX). WALKIE_ANSWER_MAX gilt nur für kurze
@@ -2173,7 +2193,8 @@ class Walkie(QWidget):
         self.level_timer.stop()
         if not self.rec_proc:
             return
-        heard = (getattr(self, "answer_voice", 0) >= self.rec_start or peak >= QUIET_PEAK)
+        heard = (getattr(self, "answer_voice", 0) >= self.rec_start or peak >= QUIET_PEAK
+                 or self.voice_contrast(self.rec_file) >= VOICE_CONTRAST)
         laps = Laps()
         if self.answer_req == TALK and self.piper is not None and heard:
             # Gesprochen: „Okay“ sagen, SOLANGE die Aufnahme noch läuft – nur dann ist die
