@@ -91,9 +91,9 @@ def _run(argv):
     return r.returncode == 0, (r.stdout + r.stderr).strip()
 
 
-def claude_installed():
+def claude_installed(b=None):
     """Ist irgendein walkie-Plugin in Claude Code installiert? None = unbekannt."""
-    ok, out = _run([_bin("claude"), "plugin", "list", "--json"])
+    ok, out = _run([b or _bin("claude"), "plugin", "list", "--json"])
     if not ok:
         return None
     try:
@@ -102,7 +102,7 @@ def claude_installed():
         return None
 
 
-def codex_installed():
+def codex_installed(_b=None):
     """`codex plugin list` fragt entfernte Marketplaces ab und braucht oft über eine Minute –
     die Config sagt dasselbe sofort."""
     home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
@@ -177,7 +177,13 @@ def ensure(log=print, force=False):
         b = _bin(name)
         if (name in state and not force) or not shutil.which(b):
             continue                     # schon einmal erledigt, oder Agent nicht installiert
-        have = a["installed"]()
+        have = a["installed"](b)
+        desktop = desktop_claude() if name == "claude" else None
+        if have is None and desktop and desktop != b:
+            # `claude` im Suchpfad läuft nicht (z. B. npm-Claude ohne Git für Windows: „requires
+            # git-bash“) – das Claude Code der Desktop-App teilt ~/.claude und läuft ohne.
+            b = desktop
+            have = a["installed"](b)
         if have is None:
             log(f"plugin {name}: Stand unbekannt – nichts geändert")
             continue
@@ -194,7 +200,7 @@ def ensure(log=print, force=False):
             log(f"plugin {name}: installieren fehlgeschlagen: {out[-300:]}")
             continue                     # beim nächsten Start nochmal versuchen
         log(f"plugin {name}: {PLUGIN} eingerichtet (aus {src})")
-        state[name] = {"by": "walkie", "source": src}
+        state[name] = {"by": "walkie", "source": src, **({"bin": b} if b == desktop else {})}
         added.append(a["label"])
     save_state(state)
     return added
@@ -206,7 +212,7 @@ def uninstall(log=print):
     for name, a in AGENTS.items():
         if state.get(name, {}).get("by") != "walkie":
             continue
-        for argv in a["remove"](_bin(name)):
+        for argv in a["remove"](state[name].get("bin") or _bin(name)):
             ok, out = _run(argv)
             if not ok:
                 log(f"plugin {name}: {' '.join(argv[1:])}: {out[-300:]}")

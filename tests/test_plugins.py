@@ -35,8 +35,8 @@ class PluginsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.fake = Fake()
-        installed = {"claude": lambda: self.fake.have.get("claude", False),
-                     "codex": lambda: self.fake.have.get("codex", False)}
+        installed = {"claude": lambda b=None: self.fake.have.get("claude", False),
+                     "codex": lambda b=None: self.fake.have.get("codex", False)}
         agents = {k: {**v, "installed": installed[k]} for k, v in plugins.AGENTS.items()}
         for p in (patch.object(plugins, "STATE", self.tmp / "plugins.json"),
                   patch.object(plugins, "AGENTS", agents),
@@ -81,8 +81,18 @@ class PluginsTest(unittest.TestCase):
         self.assertNotIn("codex", json.loads((self.tmp / "plugins.json").read_text()))
 
     def test_unknown_state_changes_nothing(self):
-        plugins.AGENTS["claude"]["installed"] = lambda: None
-        self.assertEqual(plugins.ensure(log=lambda m: None), ["Codex"])
+        plugins.AGENTS["claude"]["installed"] = lambda b=None: None
+        with patch.object(plugins, "desktop_claude", return_value=None):
+            self.assertEqual(plugins.ensure(log=lambda m: None), ["Codex"])
+        self.assertFalse(any(a[0] == "claude" for a in self.fake.calls))
+
+    def test_broken_path_claude_falls_back_to_desktop_claude(self):
+        # npm-Claude ohne Git für Windows scheitert an jedem Aufruf; die Desktop-App bringt ein
+        # eigenes Claude Code mit, das dieselben Plugin-Dateien liest
+        plugins.AGENTS["claude"]["installed"] = lambda b=None: None if b == "claude" else False
+        with patch.object(plugins, "desktop_claude", return_value="desktop-claude"):
+            self.assertEqual(plugins.ensure(log=lambda m: None), ["Claude Code", "Codex"])
+        self.assertIn(["desktop-claude", "plugin", "install", plugins.PLUGIN], self.fake.calls)
         self.assertFalse(any(a[0] == "claude" for a in self.fake.calls))
 
 

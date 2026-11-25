@@ -89,6 +89,22 @@ test('nicht-interaktive Sessions (claude -p, Hilfsabfragen) werden nicht gemelde
   expect(bodies(fetched, '/event')).toEqual([])
 })
 
+test('Code-Tab der Desktop-App (SDK, nicht interaktiv) wird gemeldet, ein claude -p darin nicht', async ($, on) => {
+  let parent: string | undefined
+  const fetched = engine(on, {}, {
+    'env.get': (_: unknown, e: { name: string }) => ({
+      value: { CLAUDE_CODE_ENTRYPOINT: 'claude-desktop', CLAUDE_CODE_SESSION_ID: parent }[e.name],
+    }) as never,
+  })
+  await $.session.start({ cwd: '/home/x/shop', surface: null, isInteractive: false })
+  expect(bodies(fetched, '/event')[0]).toMatchObject({ event: 'ready', session: 'S1' })
+
+  fetched.length = 0
+  parent = 'ELTERN'
+  await $.session.start({ cwd: '/home/x/shop', surface: null, isInteractive: false })
+  expect(bodies(fetched, '/event')).toEqual([])
+})
+
 test('Plugin da, App nie eingerichtet: Hinweis auf /walkie:start, höchstens dreimal', async ($, on) => {
   on('command.register', () => ({ value: { command: 'walkie' } }))
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))

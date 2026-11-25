@@ -323,9 +323,11 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   sid = ''
   windowsRun = undefined
   lateStart = true                   // Start gesehen: nichts nachholen (auch nicht bei claude -p)
-  if (!interactive || (await $.env.get('WALKIE_SESSION'))) return
+  if (await $.env.get('WALKIE_SESSION')) return
+  const own = await $.session.id()
+  if (!interactive && !(await desktopSession($, own))) return
   await setupHint($).catch(() => undefined)
-  sid = await $.session.id()
+  sid = own
   cwd = await $.session.cwd()
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
   const trimmed = cwd.replace(/[\\/]+$/, '')
@@ -341,6 +343,16 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
 }
 
 let lateStart = false
+
+/** Session im Code-Tab der Claude-Desktop-App? Die App startet Claude Code über das SDK, die
+ *  Engine meldet sie darum als nicht interaktiv – obwohl jemand davorsitzt. Ein `claude -p`,
+ *  das so eine Session selbst startet, erbt ihre Variablen, trägt aber die Session-ID der
+ *  Elternsession: Nur die Session selbst zählt. */
+async function desktopSession($: EngineInterface, own: string): Promise<boolean> {
+  if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) !== 'claude-desktop') return false
+  const parent = await $.env.get('CLAUDE_CODE_SESSION_ID')
+  return !parent || parent === own
+}
 
 /** Nach /reload-plugins läuft das Plugin als neue Instanz, ohne dass die Engine noch einmal
  *  session.start meldet: Es kannte seine Session nicht und blieb ganz stumm (keine Ereignisse,
