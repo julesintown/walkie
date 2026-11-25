@@ -32,6 +32,7 @@ let lastTool = 0
 let poller: { cancel: () => void } | undefined
 let polling = false
 let pollSince = 0                  // Beginn des laufenden Abrufs
+let submitting = ''                // Nachricht, deren Zustellung gerade auf die Session wartet
 let pollGen = 0
 const POLL_STUCK_MS = 20_000       // länger hängt ein Abruf nur, wenn seine Anfrage nie beantwortet wird
 let announcing = false
@@ -180,7 +181,10 @@ async function ensureAnnounced($: EngineInterface) {
 }
 
 async function pollInbox($: EngineInterface) {
-  if (!sid || Date.now() < retryAt) return
+  // Eine Zustellung wartet absichtlich, bis die Session frei ist (Minuten, wenn sie arbeitet).
+  // Solange nichts abholen: Der Hänger-Schutz unten hielt das für hängend und stellte dieselbe
+  // Nachricht alle 20 s erneut zu (13-mal in einer langen Runde).
+  if (!sid || Date.now() < retryAt || submitting) return
   // Eine Anfrage, die nie beantwortet wird (Walkie mitten im Beenden), hielt `polling` für immer
   // fest: Die Session holte danach nichts mehr ab, gesprochene Sätze blieben im Walkie liegen.
   if (polling && Date.now() - pollSince < POLL_STUCK_MS) return
@@ -205,6 +209,7 @@ async function pollInbox($: EngineInterface) {
       await confirmDelivery(item.id, await $.store.get(key), async () => {
         const previous = voiceTurn
         voiceTurn = true
+        submitting = item.id
         try {
           checkVoiceSubmission(await $.prompt.submit({ text: item.text }))
         } catch (error) {
@@ -215,6 +220,8 @@ async function pollInbox($: EngineInterface) {
             if (sent) delayed = item.id
           }
           throw error
+        } finally {
+          submitting = ''
         }
       }, async () => { await $.store.set(key, item.id) },
       async () => { await call($, '/ack', { session, id: item.id }) })
