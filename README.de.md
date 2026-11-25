@@ -151,6 +151,13 @@ dort sind die Kopfhörertasten der bessere Weg.
 oder einem eigenen Befehl kann. Ohne Claude Code denkt Walkie mit dem, was installiert ist
 (`codex`, `agy -p`, `gemini -p`) – so funktioniert der Sprachchat z. B. auch mit nur Antigravity.
 
+**Walkie auf Windows, Claude Code in WSL** (z. B. im Windows Terminal): Läuft in WSL kein
+eigener Walkie, meldet sich das Plugin beim Walkie auf Windows. Dafür muss WSL den Windows-Rechner
+unter `127.0.0.1` erreichen: `networkingMode=mirrored` unter `[wsl2]` in
+`C:\Users\<du>\.wslconfig`, danach `wsl --shutdown`. Das Fenster einer WSL-Session findet Walkie
+über den Fenstertitel. Ein anderer Statusordner auf Windows lässt sich mit `WALKIE_WINDOWS_RUN`
+angeben.
+
 **Download-Größe:** rund 200 MB Pakete (Qt, ONNX, Whisper-Laufzeit), dazu eine Stimme (~60 MB)
 und das Whisper-Modell „base“ (~140 MB). Weitere Stimmen lädt Walkie erst, wenn du sie wählst.
 

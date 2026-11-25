@@ -4,8 +4,13 @@ import { checkVoiceSubmission, confirmDelivery } from './session'
 type Fetch = { url: string; init?: { method?: string; body?: string } }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function engine(on: (...args: any[]) => unknown, answers: Record<string, unknown>) {
+function engine(on: (...args: any[]) => unknown, answers: Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  own: Record<string, (...args: any[]) => unknown> = {}) {
   const fetched: Fetch[] = []
+  const real = on
+  on = (name: string, fn: unknown) => real(name, own[name] ?? fn)
+  for (const name of Object.keys(own)) if (!['env.get', 'fs.read'].includes(name)) real(name, own[name])
   on('command.register', () => ({ value: { command: 'walkie' } }))
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'S1' }) as never)
@@ -152,4 +157,39 @@ test('ein von der Engine abgelehnter Prompt gilt nicht als zugestellt', async ($
   expect(failed).toBe(true)
   answer = { text: 'Hallo' }
   checkVoiceSubmission(await $.prompt.submit({ text: 'Hallo', wait: false, origin: { kind: 'unclassified' } }))
+})
+
+test('WSL ohne eigenen Walkie: meldet sich beim Walkie auf Windows', async ($, on) => {
+  const env: Record<string, string> = { WSL_DISTRO_NAME: 'Ubuntu', HOME: '/home/x' }
+  const read: string[] = []
+  const fetched = engine(on, {}, {
+    'env.get': (_: unknown, e: unknown) => ({ value: env[Object.values(e as object)[0] as string] }),
+    'fs.read': (_: unknown, e: unknown) => {
+      const path = Object.values(e as object)[0] as string
+      read.push(path)
+      if (path.startsWith('/mnt/c/')) return { value: JSON.stringify({ port: 5050, token: 'win' }) }
+      throw new Error('ENOENT')               // in WSL läuft kein Walkie
+    },
+    'process.run': () => ({ value: { exitCode: 0, stdout: '/mnt/c/Users/X\n', stderr: '' } }),
+  })
+  await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: true })
+  expect(fetched[0]?.url).toBe('http://127.0.0.1:5050/event')
+  expect(read).toContain('/mnt/c/Users/X/.local/state/walkie/server.json')
+  expect(JSON.parse(fetched[0]?.init?.body ?? '{}').pid).toBeUndefined()   // Linux-PID: nichts für Windows
+})
+
+test('ohne WSL: nur der eigene Statusordner, kein Windows-Suchen', async ($, on) => {
+  let runs = 0
+  const read: string[] = []
+  engine(on, {}, {
+    'fs.read': (_: unknown, e: unknown) => {
+      read.push(Object.values(e as object)[0] as string)
+      throw new Error('ENOENT')
+    },
+    'process.run': () => { runs++; return { value: { exitCode: 0, stdout: '', stderr: '' } } },
+  })
+  await $.session.start({ cwd: '/home/x/shop', surface: 'terminal', isInteractive: true })
+  expect(read.length).toBeGreaterThan(0)
+  expect(read.some(p => p.startsWith('/mnt/'))).toBe(false)
+  expect(runs).toBeLessThanOrEqual(1)          // höchstens ownPid
 })

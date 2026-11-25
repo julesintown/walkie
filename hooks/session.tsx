@@ -17,7 +17,7 @@ const VOICE_CONTEXT =
   'is pleasant to listen to; for status updates and confirmations, be brief. Answer in the ' +
   "user's language, without markdown unless code is requested."
 
-type Server = { url: string; token: string }
+type Server = { url: string; token: string; windows?: boolean }   // windows: Walkie auf Windows, Session in WSL
 
 let receipt = ''
 let delayed = ''
@@ -40,17 +40,50 @@ async function runDir($: EngineInterface): Promise<string> {
   return `${state}/walkie`
 }
 
-/** Adresse der laufenden App – undefined, wenn sie nicht läuft. */
-async function server($: EngineInterface): Promise<Server | undefined> {
-  try {
-    const s = JSON.parse(await $.fs.read(`${await runDir($)}/server.json`)) as {
-      port: number
-      token: string
+let windowsRun: Promise<string | undefined> | undefined
+
+/** Nur unter WSL: Statusordner eines Walkies, der auf Windows läuft
+ *  (C:\Users\<du>\.local\state\walkie, als /mnt/c/…). WALKIE_WINDOWS_RUN überschreibt die
+ *  Suche. Wird einmal pro Session ermittelt. Erreichbar ist dieser Walkie aus WSL nur mit
+ *  networkingMode=mirrored in der .wslconfig (sonst ist 127.0.0.1 nicht der Windows-Rechner). */
+async function windowsRunDir($: EngineInterface): Promise<string | undefined> {
+  const own = await $.env.get('WALKIE_WINDOWS_RUN')
+  if (own) return own
+  windowsRun ??= (async () => {
+    try {
+      // WSL: Variable der WSL-Shell (fehlt z. B. im xrdp-Desktop) oder Kennung des WSL-Kernels.
+      // Auf macOS/Windows gibt es die Datei nicht -> kein WSL, nichts weiter.
+      const wsl = Boolean(await $.env.get('WSL_DISTRO_NAME')) ||
+        /microsoft/i.test(await $.fs.read('/proc/sys/kernel/osrelease').catch(() => ''))
+      if (!wsl) return undefined
+      // cmd.exe liegt nicht immer im PATH (appendWindowsPath=false)
+      const r = await $.process.run(['sh', '-c',
+        'p=$( (cmd.exe /c "echo %USERPROFILE%" || /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%")' +
+        ' 2>/dev/null | tr -d "\\r"); [ -n "$p" ] && wslpath -u "$p"'], { timeoutMs: 8000 })
+      const home = r.stdout.trim()
+      return home ? `${home}/.local/state/walkie` : undefined
+    } catch {
+      return undefined
     }
-    return { url: `http://127.0.0.1:${s.port}`, token: s.token }
+  })()
+  return windowsRun
+}
+
+async function readServer($: EngineInterface, dir: string | undefined,
+  windows = false): Promise<Server | undefined> {
+  if (!dir) return undefined
+  try {
+    const s = JSON.parse(await $.fs.read(`${dir}/server.json`)) as { port: number; token: string }
+    return { url: `http://127.0.0.1:${s.port}`, token: s.token, windows }
   } catch {
     return undefined
   }
+}
+
+/** Adresse der laufenden App – undefined, wenn sie nicht läuft. Unter WSL ohne eigenen Walkie
+ *  auch der Walkie auf Windows; überall sonst nur der eigene Statusordner. */
+async function server($: EngineInterface): Promise<Server | undefined> {
+  return (await readServer($, await runDir($))) ?? (await readServer($, await windowsRunDir($), true))
 }
 
 async function call($: EngineInterface, path: string, body?: unknown) {
@@ -202,6 +235,7 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   // die der Walkie selbst startet (dort ist WALKIE_SESSION gesetzt). Sonst kennt er „Sessions“,
   // die nach Sekunden wieder weg sind.
   sid = ''
+  windowsRun = undefined
   if (!interactive || (await $.env.get('WALKIE_SESSION'))) return
   await setupHint($).catch(() => undefined)
   sid = await $.session.id()
@@ -211,7 +245,9 @@ export async function sessionStart($: EngineInterface, interactive: boolean) {
   project = trimmed === home.replace(/[\\/]+$/, '')
     ? 'Home'
     : trimmed.split(/[\\/]/).pop() || cwd
-  await emit($, 'ready', { cwd, pid: await ownPid($) })
+  // Walkie auf Windows: Linux-PIDs sagen ihm nichts (er sucht das Fenster dann über den Titel)
+  const pid = (await server($))?.windows ? undefined : await ownPid($)
+  await emit($, 'ready', { cwd, pid })
   poller?.cancel()
   poller = $.clock.every(500, () => void pollInbox($).catch(() => undefined))
 }
