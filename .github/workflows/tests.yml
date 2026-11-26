@@ -83,6 +83,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
       - name: Erstinstallation
         run: python cli.py setup --no-start ${{ runner.os != 'Linux' && '--no-assets' || '' }}
+      - name: App-Eintrag mit Icon
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   f="$HOME/.local/share/applications/walkie.desktop" ;;
+            macOS)   f="$HOME/Applications/Walkie.app/Contents/Resources/walkie.icns"
+                     sh -n "$HOME/Applications/Walkie.app/Contents/MacOS/Walkie" ;;
+            Windows) f="$(cygpath "$APPDATA")/Microsoft/Windows/Start Menu/Programs/Walkie.lnk" ;;
+          esac
+          test -s "$f" && echo "ok: $f"
       - name: Heruntergeladene Modelle offline öffnen
         if: runner.os == 'Linux'
         env:

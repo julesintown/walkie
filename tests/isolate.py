@@ -16,6 +16,8 @@ for key, sub in (("WALKIE_RUN", "run"), ("WALKIE_CONFIG", "config.env"),
 (ROOT / "xdg").mkdir(exist_ok=True)
 # Tests verändern nie die echte Lautstärke anderer Programme (ducking.py)
 os.environ.setdefault("WALKIE_DUCK", "100")
+# Tests legen nie einen echten App-Eintrag an (Startmenü, ~/Applications, App-Menü)
+os.environ.setdefault("WALKIE_NO_APP_ENTRY", "1")
 # Sprache deterministisch und ohne PowerShell-Abfrage (WSL), kein Schreiben in ~/.cache
 os.environ.setdefault("XDG_CACHE_HOME", str(ROOT / "cache"))
 if not any(os.environ.get(k) not in (None, "", "C", "POSIX", "C.UTF-8")

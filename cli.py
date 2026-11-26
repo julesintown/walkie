@@ -45,7 +45,7 @@ import settings as S  # noqa: E402
 from hook import LEARN_FLAG, LEARN_LOG, RUN, bridge_ready, walkie_running  # noqa: E402
 
 INSTALL = RUN / "install"            # vom Begleiter beim Start geschrieben
-COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+COLOR = bool(sys.stdout and sys.stdout.isatty()) and not os.environ.get("NO_COLOR")  # pythonw: None
 
 
 def c(text, code):
@@ -807,6 +807,7 @@ def cmd_setup(args):
             ok("Mac-Mikrofon mit Echounterdrückung bereit (Einstellungen → experimentell)")
 
     install_launcher(root)
+    install_app(root)
     step(5, "Prüfen und starten")
     if subprocess.run([str(py), str(root / "doctor.py"), "--allow-missing-agent"]).returncode:
         die("Einrichtung fehlgeschlagen. Die mit ✗ markierten Probleme oben beheben.")
@@ -904,6 +905,21 @@ def install_launcher(root=None, quiet=False):
     return dest
 
 
+def install_app(root=None, quiet=False):
+    """App-Eintrag mit Icon (Startmenü/Desktop, ~/Applications/Walkie.app, App-Menü), siehe
+    appentry.py. quiet: nur anlegen, falls er fehlt – beim Start, für ältere Installationen."""
+    import appentry
+    try:
+        dest = appentry.install(root or install_dir(), refresh=not quiet, desktop=not quiet)
+    except OSError as ex:
+        if not quiet:
+            print(dim(f"  App-Symbol nicht eingerichtet: {ex}"))
+        return None
+    if dest and not quiet:
+        ok(f"App-Symbol eingerichtet ({dest})")
+    return dest
+
+
 def installed():
     """Ist die Python-Umgebung mit den Paketen des Walkies eingerichtet?"""
     import paths
@@ -921,6 +937,7 @@ def cmd_default(_args):
         bridge_post("/show")                  # läuft schon: Figur nach vorne holen
         ok("Walkie läuft – die Figur ist wieder sichtbar. Einstellungen: walkie gui · Hilfe: walkie help")
         install_launcher(quiet=True)
+        install_app(quiet=True)
         return
     if not installed():
         print(bold("Walkie ist noch nicht eingerichtet – das passiert jetzt einmalig."))
@@ -986,6 +1003,7 @@ def cmd_start(_args):
     waiting = os.environ.pop("WALKIE_WAIT_PID", "")
     if waiting.isdigit():
         wait_for_exit(int(waiting))
+    install_app(quiet=True)
     if bridge_ready():
         ok("läuft schon")
         return

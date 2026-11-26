@@ -88,6 +88,10 @@ zweite Anmeldung braucht es nicht. Der Walkie aktualisiert sich beim Start und a
 selbst von GitHub, die exe muss nie ersetzt werden. Bei der unsignierten exe kann Windows
 SmartScreen warnen: *Weitere Informationen → Trotzdem ausführen*.
 
+**Wie eine App starten:** Die Einrichtung legt den Walkie mit seinem Icon ins Startmenü und auf
+den Desktop (Windows), nach `~/Applications`, damit er in Launchpad und Spotlight auftaucht
+(macOS), bzw. ins Anwendungsmenü (Linux). Ein Klick startet ihn oder holt die Figur nach vorne.
+
 Walkie wird in erster Linie für **Claude Code** entwickelt und dort getestet. Öffne eine Claude-Code-Sitzung und gib die folgenden Befehle nacheinander ein.
 
 ```

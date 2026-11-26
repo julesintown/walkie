@@ -7,7 +7,7 @@ name: Walkie.exe
 on:
   push:
     branches: [main]
-    paths: [launcher/**, .github/workflows/launcher.yml]
+    paths: [launcher/**, icons/walkie.ico, .github/workflows/launcher.yml]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
         shell: pwsh
         run: |
           & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" -nologo -optimize `
-            -target:winexe -out:Walkie.exe launcher\Walkie.cs
+            -target:winexe -win32icon:icons\walkie.ico -out:Walkie.exe launcher\Walkie.cs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Veröffentlichen
         shell: pwsh

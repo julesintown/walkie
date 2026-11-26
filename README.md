@@ -84,6 +84,10 @@ thinking with their own login, so no extra `claude` or sign-in is needed. Walkie
 from GitHub on start and every few hours; the exe never needs replacing. Windows may show a
 SmartScreen warning for the unsigned exe: *More info → Run anyway*.
 
+**Start it like an app:** setup adds Walkie with its icon to the Start menu and desktop
+(Windows), to `~/Applications` so it shows up in Launchpad and Spotlight (macOS), or to the
+application menu (Linux). Clicking it starts Walkie or brings the figure back to the front.
+
 Walkie is developed and tested primarily with **Claude Code**. Open a Claude Code session and enter these commands one at a time.
 
 ```
