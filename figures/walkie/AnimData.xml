@@ -85,7 +85,7 @@
     <Anim>
       <Name>Charge</Name>
       <Index>4</Index>
-      <FrameWidth>192</FrameWidth>
+      <FrameWidth>222</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
         <Duration>7</Duration>
@@ -233,7 +233,7 @@
       <Name>Fall</Name>
       <Index>13</Index>
       <FrameWidth>456</FrameWidth>
-      <FrameHeight>384</FrameHeight>
+      <FrameHeight>452</FrameHeight>
       <Durations>
         <Duration>8</Duration>
         <Duration>7</Duration>
