@@ -44,10 +44,14 @@
       <FrameWidth>192</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
-        <Duration>8</Duration>
-        <Duration>8</Duration>
-        <Duration>8</Duration>
-        <Duration>8</Duration>
+        <Duration>7</Duration>
+        <Duration>5</Duration>
+        <Duration>6</Duration>
+        <Duration>5</Duration>
+        <Duration>7</Duration>
+        <Duration>5</Duration>
+        <Duration>6</Duration>
+        <Duration>5</Duration>
       </Durations>
     </Anim>
     <Anim>
@@ -128,8 +132,14 @@
       <FrameWidth>456</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
-        <Duration>14</Duration>
-        <Duration>14</Duration>
+        <Duration>7</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>6</Duration>
+        <Duration>5</Duration>
+        <Duration>5</Duration>
+        <Duration>7</Duration>
       </Durations>
     </Anim>
     <Anim>
@@ -251,7 +261,12 @@
       <FrameWidth>456</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
-        <Duration>60</Duration>
+        <Duration>7</Duration>
+        <Duration>6</Duration>
+        <Duration>6</Duration>
+        <Duration>6</Duration>
+        <Duration>6</Duration>
+        <Duration>7</Duration>
       </Durations>
     </Anim>
     <Anim>
@@ -276,7 +291,12 @@
       <FrameWidth>456</FrameWidth>
       <FrameHeight>384</FrameHeight>
       <Durations>
-        <Duration>60</Duration>
+        <Duration>12</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>12</Duration>
+        <Duration>8</Duration>
       </Durations>
     </Anim>
     <Anim>
@@ -301,7 +321,14 @@
       <FrameWidth>192</FrameWidth>
       <FrameHeight>264</FrameHeight>
       <Durations>
-        <Duration>60</Duration>
+        <Duration>11</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>11</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
+        <Duration>8</Duration>
       </Durations>
     </Anim>
     <Anim>
