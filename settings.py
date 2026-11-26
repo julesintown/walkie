@@ -67,6 +67,8 @@ VOICES = {
     "Deutsch · Ramona (weiblich)": ("de_DE-ramona-low", None),
     "English (US) · Lessac (female)": ("en_US-lessac-medium", None),
     "English (US) · Ryan (male)": ("en_US-ryan-medium", None),
+    "English (US) · Joe (male, deep)": ("en_US-joe-medium", None),
+    "English (US) · Norman (male, deep)": ("en_US-norman-medium", None),
     "English (UK) · Jenny (female)": ("en_GB-jenny_dioco-medium", None),
     "English (UK) · Alan (male)": ("en_GB-alan-medium", None),
     "Français · Siwis (féminin)": ("fr_FR-siwis-medium", None),
