@@ -68,6 +68,7 @@ WHISPER_MODEL = S.get("WALKIE_WHISPER")   # "small" = genauer, ~3x langsamer
 TERM_W, TERM_H = 680, 390            # Größe des Terminals in Pixeln
 ANIM_SPEED = 1.2                     # Spiel-Frames (1/60 s) pro Tick (33 ms); 2 = Originaltempo
 WALK_SPEED = 1                       # Pixel pro Tick
+FLOOR_GAP = 0                        # Füße so viele Pixel über Taskleiste/Bildschirmrand (0 = steht drauf)
 WANDER_EVERY_MS = 12000
 ACTION_CHANCE = 0.15
 MIC_DEAD = 0.002                     # darunter liefert das Mikro praktisch nur Nullen
@@ -889,7 +890,7 @@ class Walkie(QWidget):
         self.panel = None
         self.refresh_panel()
         g = QApplication.primaryScreen().availableGeometry()
-        self.move(g.right() - self.SIZE - 60, g.bottom() - self.SIZE + 6)
+        self.move(g.right() - self.SIZE - 60, g.bottom() - self.SIZE + 12 - FLOOR_GAP)
         # Klettern, Fensterkanten, Schwerkraft (climber.py / surfaces.py)
         self.climb = climber.Climber()
         self.rot = 0                         # Drehung beim Zeichnen (gedrehtes Klettern)
@@ -987,7 +988,7 @@ class Walkie(QWidget):
         a = self.anim.s
         box = self.rot_bbox(*self.pose("wall", "left", moving=True))
         size = (box[2] - box[0], box[3] - box[1])
-        return {"screen": screen, "floor": g.bottom() - 6,
+        return {"screen": screen, "floor": g.bottom() - FLOOR_GAP,
                 "ledges": ledges(wins, screen, min_top=g.top() + self.SIZE - 20),
                 "win_x": {w["id"]: w["x"] for w in wins},
                 "idle": (self.view == "idle" and not self.sleeping and not self.term.visible
@@ -1002,7 +1003,7 @@ class Walkie(QWidget):
             return
         l, t, r, b = self.rot_bbox(*self.pose("wall", side, moving=True))
         g = (self.screen() or QApplication.primaryScreen()).availableGeometry()
-        self.climb.climb(side, self.x() + self.SIZE / 2, g.bottom() - 6 - (b - t) / 2)
+        self.climb.climb(side, self.x() + self.SIZE / 2, g.bottom() - FLOOR_GAP - (b - t) / 2)
         dbg(f"klettern: floor -> wall ({side})")
 
     def jump_to_session(self, sid):
@@ -1665,7 +1666,7 @@ class Walkie(QWidget):
         self.climb.to_floor()
         self.target_x = self.climb_to = None
         self.rot = 0
-        self.move(g.right() - self.SIZE - 60, g.bottom() - self.SIZE + 6)
+        self.move(g.right() - self.SIZE - 60, g.bottom() - self.SIZE + 12 - FLOOR_GAP)
         self.update()
 
     def bring_back(self, why=""):
