@@ -17,7 +17,9 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def fake_root(base):
-    root = Path(base) / "Walkie's \"app\" $HOME"   # Leerzeichen und Sonderzeichen im Pfad
+    # Leerzeichen und Sonderzeichen im Pfad ("" ist unter Windows in Dateinamen nicht erlaubt)
+    name = "Walkie's app $HOME" if sys.platform == "win32" else "Walkie's \"app\" $HOME"
+    root = Path(base) / name
     (root / "bin").mkdir(parents=True)
     (root / "icons").mkdir()
     (root / "walkie.py").write_text("")
@@ -40,7 +42,7 @@ class LinuxEntryTest(unittest.TestCase):
             text = appentry.desktop_entry(root)
         exec_line = next(line for line in text.splitlines() if line.startswith("Exec="))
         self.assertEqual(exec_line, 'Exec="' + str(root / "bin" / "walkie")
-                         .replace('"', '\\"').replace("$", "\\$") + '"')
+                         .replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"')
         self.assertIn(f"Icon={root / 'icons' / 'walkie.png'}", text)
         self.assertIn("Terminal=false", text)
 
