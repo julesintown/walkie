@@ -603,6 +603,13 @@ class WalkieTest(unittest.TestCase):
         finally:
             lock.close()
 
+    def quiet_mic(self):
+        """Frage-Signal zählen, aber nie das echte Mikro öffnen (macOS-CI stürzt dabei ab)."""
+        try:
+            self.b.bus.ask.disconnect(self.b.listen_answer)
+        except TypeError:
+            pass                                        # schon getrennt
+
     def ask_with(self, muted, mode):
         import settings
         self.addCleanup(settings.set, "WALKIE_MUTED", settings.get("WALKIE_MUTED"))
@@ -613,6 +620,7 @@ class WalkieTest(unittest.TestCase):
                                 "prompt": "shop fragt: Weiter?", "ts": 9e12}
         self.b.whisper = object()
         self.b.voice_ok = lambda p: True
+        self.quiet_mic()
         self.b.answer_done.set()
         spoken, asked = [], []
         self.b._speak = lambda text, *a, **k: spoken.append(text)
@@ -633,6 +641,7 @@ class WalkieTest(unittest.TestCase):
         self.assertEqual(len(self.ask_with(False, "auto")[1]), 1)
         self.b.pending.clear()
         self.b._speak = lambda *a, **k: False                  # abgebrochen
+        self.quiet_mic()
         self.b.pending["r1"] = {"session": "S", "who": "shop", "kind": "reply", "tool": "",
                                 "detail": "", "reason": "", "questions": [], "answers": {},
                                 "prompt": "shop fragt: Weiter?", "ts": 9e12}
