@@ -166,5 +166,7 @@
  "한국어": "한국어",
  "Claude in WSL (Windows)": "Claude in WSL (Windows)",
  "Aussprache": "Pronunciation",
- "Wie die Stimme Wörter sprechen soll, z. B. Walkie=Uohki; Claude=[[klˈɔːd]] ([[…]] = Lautschrift). Gehen den eingebauten vor (deutsch: Walkie, Claude, Gemini).": "How the voice should say words, e.g. Walkie=Uohki; Claude=[[klˈɔːd]] ([[…]] = phonemes). They take precedence over the built-in ones (German: Walkie, Claude, Gemini)."
+ "Wie die Stimme Wörter sprechen soll, z. B. Walkie=Uohki; Claude=[[klˈɔːd]] ([[…]] = Lautschrift). Gehen den eingebauten vor (deutsch: Walkie, Claude, Gemini).": "How the voice should say words, e.g. Walkie=Uohki; Claude=[[klˈɔːd]] ([[…]] = phonemes). They take precedence over the built-in ones (German: Walkie, Claude, Gemini).",
+ "Stumm (nur die Figur)": "Muted (figure only)",
+ "Kein Ton: keine Ansagen, keine vorgelesenen Antworten, keine Signaltöne und kein Zuhören von selbst. Per Taste reden geht weiter.": "No sound: no announcements, no answers read aloud, no beeps and no listening on its own. Talking by button still works."
 }

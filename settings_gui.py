@@ -1000,6 +1000,7 @@ class SettingsWindow(QWidget):
         demo.setEnabled(self.walkie is not None)
         self.setting_row(c, "WALKIE_VOICE", extra=demo)
         self.setting_row(c, "WALKIE_READ_ANSWERS")
+        self.setting_row(c, "WALKIE_MUTED")
         c = self.card(pg, t("KI-Modelle"))
         self.setting_row(c, "WALKIE_BRAIN")
         self.setting_row(c, "WALKIE_SUMMARY_MODEL")

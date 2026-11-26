@@ -212,6 +212,8 @@ BT_BEEP_GAIN = 0.12      # Telefonmodus: eigene, meist volle Lautstärke – 0.3
 
 def beep(up=True, wait=False, gain=0.35):
     """Signalton (siehe TONES): up=True/False, "click" oder "busy"."""
+    if S.get("WALKIE_MUTED"):                  # stumm: nur die Figur, gar kein Ton
+        return
     import numpy as np
     rate = 22050
     tones, dur = TONES[up]
@@ -1359,6 +1361,12 @@ class Walkie(QWidget):
             a_close = a_new = None
         a_stop = m.addAction(t("Sprechen stoppen"))
         m.addSeparator()
+        a_speak = QAction(t("Sprechen"), m, checkable=True, checked=not self.muted)
+        a_listen = QAction(t("Nach Fragen sofort zuhören"), m, checkable=True,
+                           checked=self.auto_listen)
+        a_listen.setEnabled(not self.muted)
+        m.addAction(a_speak)
+        m.addAction(a_listen)
         a_voice = QAction(t("Antworten vorlesen"), m, checkable=True, checked=self.voice_on)
         a_walk = QAction(t("Herumlaufen"), m, checkable=True, checked=self.wander)
         a_notify = QAction(t("Benachrichtigungen"), m, checkable=True, checked=self.notify_on)
@@ -1399,6 +1407,13 @@ class Walkie(QWidget):
         elif act == a_stop:
             self.clear_announcements()
             self.stop_speaking()
+        elif act == a_speak:
+            self.muted = not a_speak.isChecked()
+            if self.muted:                     # sofort still, auch mitten im Satz
+                self.clear_announcements()
+                self.stop_speaking()
+        elif act == a_listen:
+            self.auto_listen = a_listen.isChecked()
         elif act == a_voice:
             self.voice_on = a_voice.isChecked()
         elif act == a_announce:
@@ -1622,6 +1637,10 @@ class Walkie(QWidget):
                          lambda self, v: S.set("WALKIE_NOTIFY", bool(v)))
     announce_on = property(lambda self: S.get("WALKIE_ANNOUNCE"),
                            lambda self, v: S.set("WALKIE_ANNOUNCE", bool(v)))
+    muted = property(lambda self: S.get("WALKIE_MUTED"),
+                     lambda self, v: S.set("WALKIE_MUTED", bool(v)))
+    auto_listen = property(lambda self: S.get("WALKIE_ANSWER_MODE") == "auto",
+                           lambda self, v: S.set("WALKIE_ANSWER_MODE", "auto" if v else "key"))
 
     def keep_on_screen(self):
         """Die Figur muss sichtbar sein: Nach einem Wechsel von Auflösung oder Monitoren
@@ -2713,7 +2732,7 @@ class Walkie(QWidget):
         if self.mic_cut or self.mic_taken:
             return                              # telefoniert gerade: Frage kommt danach nochmal
         if req in self.pending and self.voice_ok(p) and self.whisper is not None \
-                and S.get("WALKIE_ANSWER_MODE") == "auto":
+                and S.get("WALKIE_ANSWER_MODE") == "auto" and not self.muted:
             self.answer_done.clear()
             self.bus.ask.emit(req)
             self.answer_done.wait(timeout=40)   # erst danach die nächste Ansage
@@ -3506,6 +3525,8 @@ class Walkie(QWidget):
             self._speak(text, lead, event_ts=event_ts, label=label)
 
     def _speak(self, text, lead=0.0, event_ts=None, label="Codex-Audio"):
+        if self.muted:                         # stumm: nichts vorlesen (-> auch kein Zuhören danach)
+            return None
         text = render(text)
         clean = re.sub(r"```.*?```", t(" Den Code siehst du im Terminal. "), text, flags=re.S)
         clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)

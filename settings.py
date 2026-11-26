@@ -232,6 +232,9 @@ SCHEMA = [
     Setting("WALKIE_READ_ANSWERS", "bool", True, "voice", "Antworten vorlesen",
             "Jede Antwort deiner Sessions vorlesen – auch auf getippte Nachrichten. Aus: nur "
             "kurze Ansagen, wenn etwas fertig ist."),
+    Setting("WALKIE_MUTED", "bool", False, "voice", "Stumm (nur die Figur)",
+            "Kein Ton: keine Ansagen, keine vorgelesenen Antworten, keine Signaltöne und kein "
+            "Zuhören von selbst. Per Taste reden geht weiter."),
     Setting("WALKIE_SILENCE", "float", 7.0, "voice", "Stille bis Absenden (Sekunden)",
             "Beim Gespräch per Doppelklick.", min=2, max=30),
     Setting("WALKIE_SELF_MODEL", "choice", "sonnet", "voice", "Modell, wenn der Walkie selbst antwortet",

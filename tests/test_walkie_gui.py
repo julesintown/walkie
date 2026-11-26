@@ -75,6 +75,7 @@ class WalkieTest(unittest.TestCase):
         cls.notes = []
         bmod.notify = cls.notes.append
         bmod.media_tracker = lambda: None
+        cls.beep_real = staticmethod(bmod.beep)
         bmod.beep = lambda *a, **kw: None
         bmod.Walkie.mic_watch = lambda self: None
         bmod.HeadsetAudio.retry = lambda self: None
@@ -601,6 +602,42 @@ class WalkieTest(unittest.TestCase):
             self.assertEqual(self.voice_hook_output(proc), "")
         finally:
             lock.close()
+
+    def ask_with(self, muted, mode):
+        import settings
+        self.addCleanup(settings.set, "WALKIE_MUTED", settings.get("WALKIE_MUTED"))
+        self.addCleanup(settings.set, "WALKIE_ANSWER_MODE", settings.get("WALKIE_ANSWER_MODE"))
+        self.b.muted, self.b.auto_listen = muted, mode == "auto"
+        self.b.pending["r1"] = {"session": "S", "who": "shop", "kind": "reply", "tool": "",
+                                "detail": "", "reason": "", "questions": [], "answers": {},
+                                "prompt": "shop fragt: Weiter?", "ts": 9e12}
+        self.b.whisper = object()
+        self.b.voice_ok = lambda p: True
+        self.b.answer_done.set()
+        spoken, asked = [], []
+        self.b._speak = lambda text, *a, **k: spoken.append(text)
+        self.b.bus.ask.connect(asked.append)
+        self.b.answer_done.wait = lambda timeout=None: True
+        self.b.ask_aloud("r1")
+        self.app.processEvents()
+        return spoken, asked
+
+    def test_question_opens_mic_only_in_auto_mode(self):
+        """Büro: „Nach Fragen sofort zuhören“ aus -> Frage wird gesagt, Mikro bleibt zu."""
+        self.assertEqual(len(self.ask_with(False, "auto")[1]), 1)
+        spoken, asked = self.ask_with(False, "key")
+        self.assertEqual((len(spoken), asked), (1, []))
+
+    def test_muted_says_nothing_and_never_listens(self):
+        """„Sprechen“ aus: nur die Figur – kein Vorlesen, kein Ton, kein Mikro von selbst."""
+        spoken, asked = self.ask_with(True, "auto")
+        self.assertEqual(asked, [])
+        self.b._speak = type(self.b)._speak.__get__(self.b)
+        self.assertIsNone(self.b._speak("Hallo"), "stumm: nichts gespielt")
+        played = []
+        with patch.object(self.ev.audio, "play_pcm", lambda *a, **k: played.append(a)):
+            self.beep_real("click")
+        self.assertEqual(played, [])
 
     def test_expired_question_is_announced_not_misrouted(self):
         """Wartet die Session nicht mehr, darf Play die Antwort nicht ins Leere schicken."""

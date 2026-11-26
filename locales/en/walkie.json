@@ -135,5 +135,7 @@
  "Okay, ich mache in {agent} weiter.": "Okay, continuing in {agent}.",
  "Okay, ich öffne nichts.": "Okay, I won't open anything.",
  "Ich öffne eine neue Session in {folder}.": "Opening a new session in {folder}.",
- "Kein Terminal gefunden.": "No terminal found."
+ "Kein Terminal gefunden.": "No terminal found.",
+ "Sprechen": "Speak",
+ "Nach Fragen sofort zuhören": "Listen right after questions"
 }
