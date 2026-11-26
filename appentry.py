@@ -3,6 +3,7 @@
   Windows  Startmenü\\Programme\\Walkie.lnk (+ Desktop beim Einrichten) → pythonw cli.py
   macOS    ~/Applications/Walkie.app (Launchpad, Spotlight, Dock)      → bin/walkie
   Linux    ~/.local/share/applications/walkie.desktop (App-Menü)        → bin/walkie
+  WSL      nichts: dort startet der Windows-Walkie über sein Startmenü-Symbol
 
 Ein Klick tut dasselbe wie `walkie` ohne Argumente: starten oder die Figur nach vorne holen.
 Die Einträge zeigen auf die Installation (root) und werden bei `walkie setup` neu geschrieben,
@@ -177,14 +178,27 @@ def windows_desktop():
     return Path(os.environ.get("USERPROFILE") or Path.home()) / "Desktop"
 
 
+def in_wsl():
+    if not sys.platform.startswith("linux"):
+        return False
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    try:
+        return "microsoft" in Path("/proc/version").read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+
+
 # ---------- gemeinsam ----------
 
 def install(root, refresh=True, desktop=False):
     """App-Eintrag anlegen. refresh=False: nur, falls er fehlt (schnell, für jeden Start).
     desktop: unter Windows zusätzlich eine Verknüpfung auf dem Desktop. Gibt den Pfad zurück,
     None ohne Änderung; OSError bei Fehlern."""
-    if os.environ.get("WALKIE_NO_APP_ENTRY"):
-        return None                           # Tests (tests/isolate.py)
+    if os.environ.get("WALKIE_NO_APP_ENTRY") or in_wsl():
+        # Tests (tests/isolate.py). Unter WSL ist der Windows-Walkie der eigentliche: ein
+        # Eintrag hier (WSLg übernimmt ihn ins Windows-Startmenü) startete einen zweiten.
+        return None
     dest = entry_path()
     if dest is None or not (Path(root) / "walkie.py").exists():
         return None

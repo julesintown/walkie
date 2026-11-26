@@ -49,7 +49,8 @@ class LinuxEntryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = fake_root(temp)
             env = {"XDG_DATA_HOME": str(Path(temp) / "share")}
-            with patch.dict(os.environ, env), patch.dict(os.environ, {"WALKIE_NO_APP_ENTRY": ""}):
+            with patch.dict(os.environ, env), patch.dict(os.environ, {"WALKIE_NO_APP_ENTRY": ""}), \
+                    patch.object(appentry, "in_wsl", return_value=False):
                 dest = appentry.install(root)
                 self.assertEqual(dest, Path(temp) / "share" / "applications" / "walkie.desktop")
                 self.assertEqual(dest.read_text(), appentry.desktop_entry(root))
@@ -58,6 +59,13 @@ class LinuxEntryTest(unittest.TestCase):
                 self.assertEqual(dest.read_text(), "vom Nutzer geändert")
                 appentry.install(root)
                 self.assertEqual(dest.read_text(), appentry.desktop_entry(root), "setup: neu")
+
+    def test_nothing_under_wsl(self):
+        with tempfile.TemporaryDirectory() as temp:
+            env = {"XDG_DATA_HOME": str(Path(temp) / "share"), "WALKIE_NO_APP_ENTRY": ""}
+            with patch.dict(os.environ, env), patch.object(appentry, "in_wsl", return_value=True):
+                self.assertIsNone(appentry.install(fake_root(temp)))
+            self.assertFalse((Path(temp) / "share" / "applications").exists())
 
     def test_disabled_in_tests(self):
         with tempfile.TemporaryDirectory() as temp:
