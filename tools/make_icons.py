@@ -4,7 +4,7 @@
   python tools/make_icons.py VORLAGE.png
 
 Die Vorlage ist das Russpelz-Icon auf weißem Grund. Das Weiß außerhalb der abgerundeten Fläche
-wird durchsichtig (weiche Kante), dann entstehen:
+wird durchsichtig (weiche Kante) und abgeschnitten, sodass die Fläche bis an den Rand reicht:
   icons/walkie.png    1024 px, Linux-Startmenü und Vorlage für alles andere
   icons/walkie.ico    16–256 px, Windows (Walkie.exe, Startmenü-Verknüpfung)
   icons/walkie.icns   16–1024 px, macOS (Walkie.app)
@@ -67,7 +67,12 @@ def main(src):
     img = Image.open(src)
     if img.size[0] != img.size[1]:
         sys.exit("Die Vorlage muss quadratisch sein.")
-    icon = cut_background(img).resize((1024, 1024), Image.LANCZOS)
+    icon = cut_background(img)
+    icon = icon.crop(icon.getchannel("A").getbbox())     # graue Fläche füllt das Icon ganz aus
+    side = max(icon.size)
+    square = Image.new("RGBA", (side, side))
+    square.paste(icon, ((side - icon.width) // 2, (side - icon.height) // 2))
+    icon = square.resize((1024, 1024), Image.LANCZOS)
     OUT.mkdir(exist_ok=True)
     icon.save(OUT / "walkie.png", optimize=True)
     icon.save(OUT / "walkie.ico", sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
