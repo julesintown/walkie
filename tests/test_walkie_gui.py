@@ -628,6 +628,21 @@ class WalkieTest(unittest.TestCase):
         spoken, asked = self.ask_with(False, "key")
         self.assertEqual((len(spoken), asked), (1, []))
 
+    def test_hushed_question_does_not_open_mic(self):
+        """Taste „Ruhe“ mitten in der Frage: Vorlesen endet, das Mikro bleibt zu."""
+        self.assertEqual(len(self.ask_with(False, "auto")[1]), 1)
+        self.b.pending.clear()
+        self.b._speak = lambda *a, **k: False                  # abgebrochen
+        self.b.pending["r1"] = {"session": "S", "who": "shop", "kind": "reply", "tool": "",
+                                "detail": "", "reason": "", "questions": [], "answers": {},
+                                "prompt": "shop fragt: Weiter?", "ts": 9e12}
+        asked = []
+        self.b.bus.ask.connect(asked.append)
+        self.b.ask_aloud("r1")
+        self.app.processEvents()
+        self.assertEqual(asked, [])
+        self.assertEqual(self.ev.keymap.ACTIONS["stop_speaking"], "Ruhe (Sprechen beenden)")
+
     def test_muted_says_nothing_and_never_listens(self):
         """„Sprechen“ aus: nur die Figur – kein Vorlesen, kein Ton, kein Mikro von selbst."""
         spoken, asked = self.ask_with(True, "auto")

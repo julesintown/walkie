@@ -2728,7 +2728,9 @@ class Walkie(QWidget):
         if not p:
             return
         if self.announce_on:
-            self.speak(re.sub(r"\?\.", "?", self.prompt_text(p)))
+            if self.speak(re.sub(r"\?\.", "?", self.prompt_text(p))) is False \
+                    and not self.mic_cut:
+                return                          # „Ruhe“ gedrückt: kein Mikro hinterher
         if self.mic_cut or self.mic_taken:
             return                              # telefoniert gerade: Frage kommt danach nochmal
         if req in self.pending and self.voice_ok(p) and self.whisper is not None \
@@ -3521,8 +3523,9 @@ class Walkie(QWidget):
                 self.bus.state.emit("idle")
 
     def speak(self, text, lead=0.0, event_ts=None, label="Audio"):
+        """-> False, wenn das Vorlesen abgebrochen wurde (Taste „Ruhe“, Sprechen stoppen)."""
         with self.speak_lock:                  # Ansagen und Antworten nie gleichzeitig
-            self._speak(text, lead, event_ts=event_ts, label=label)
+            return self._speak(text, lead, event_ts=event_ts, label=label)
 
     def _speak(self, text, lead=0.0, event_ts=None, label="Codex-Audio"):
         if self.muted:                         # stumm: nichts vorlesen (-> auch kein Zuhören danach)

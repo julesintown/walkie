@@ -11,7 +11,7 @@ ACTIONS = {
     "repeat": "Wiederholen",
     "allow": "Freigabe erlauben",
     "deny": "Freigabe ablehnen",
-    "stop_speaking": "Vorlesen stoppen",
+    "stop_speaking": "Ruhe (Sprechen beenden)",
     "terminal": "Terminal zeigen",
     "show": "Fenster der Session nach vorne",
     "missed": "Was habe ich verpasst?",
