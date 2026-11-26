@@ -137,10 +137,16 @@ class WindowsSessions(Backend):
         self.utils = AudioUtilities
 
     def _sessions(self):
-        for s in self.utils.GetAllSessions():
+        """-> (Schlüssel, Lautstärke) je Sitzung. Ein Programm hat oft mehrere Sitzungen (Spotify,
+        Teams), die sich eine Lautstärke teilen – darum zählt die Sitzung, nicht die PID."""
+        for i, s in enumerate(self.utils.GetAllSessions()):
             pid = getattr(s, "ProcessId", None) or (s.Process.pid if s.Process else None)
             if pid and pid != self.own and not self._child(s):
-                yield pid, s.SimpleAudioVolume
+                try:
+                    key = s.InstanceIdentifier or f"{pid}#{i}"
+                except Exception:  # noqa: BLE001 – Sitzung schon weg
+                    key = f"{pid}#{i}"
+                yield key, s.SimpleAudioVolume
 
     def _child(self, s):
         """Eigener Kindprozess (Player-Programm) zählt als eigene Wiedergabe."""
@@ -150,23 +156,31 @@ class WindowsSessions(Backend):
             return False
 
     def duck(self, factor):
-        saved = {}
-        for pid, vol in self._sessions():
+        # Erst alle Lautstärken lesen, dann drehen: Sitzungen eines Programms teilen sich oft
+        # eine Lautstärke. Läse die zweite schon die gedrosselte, wäre "alt" falsch und die Musik
+        # käme nach jedem Satz nur noch auf 30 % zurück.
+        found = []
+        for key, vol in self._sessions():
             try:
                 old = vol.GetMasterVolume()
-                if old <= 0:
-                    continue
+            except OSError:
+                continue
+            if old > 0:
+                found.append((key, vol, old))
+        saved = {}
+        for key, vol, old in found:
+            try:
                 vol.SetMasterVolume(old * factor, None)
-                saved[pid] = (old, old * factor)
+                saved[key] = (old, old * factor)
             except OSError:
                 continue
         return saved
 
     def restore(self, saved):
-        for pid, vol in self._sessions():
-            if pid not in (saved or {}):
+        for key, vol in self._sessions():
+            if key not in (saved or {}):
                 continue
-            old, ducked = saved[pid]
+            old, ducked = saved[key]
             try:
                 if abs(vol.GetMasterVolume() - ducked) < 0.02:
                     vol.SetMasterVolume(old, None)

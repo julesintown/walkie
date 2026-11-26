@@ -166,5 +166,37 @@ class PulseTest(unittest.TestCase):
             self.assertEqual(sets, [["9", "60000"]])
 
 
+class WindowsSharedVolumeTest(unittest.TestCase):
+    """Spotify/Teams: zwei Sitzungen eines Programms teilen sich eine Lautstärke."""
+    def make(self, sessions):
+        backend = ducking.WindowsSessions.__new__(ducking.WindowsSessions)
+        backend.own = 1
+        backend.utils = type("U", (), {"GetAllSessions": staticmethod(lambda: sessions)})
+        return backend
+
+    def test_comes_back_to_full_volume_every_time(self):
+        class Shared:
+            level = 1.0
+
+        class Vol:
+            def GetMasterVolume(self):
+                return Shared.level
+
+            def SetMasterVolume(self, v, _ctx):
+                Shared.level = v
+
+        class Session:
+            def __init__(self, ident):
+                self.ProcessId, self.Process = 4140, None
+                self.InstanceIdentifier, self.SimpleAudioVolume = ident, Vol()
+
+        backend = self.make([Session("a"), Session("b")])
+        for _ in range(3):
+            saved = backend.duck(0.3)
+            self.assertAlmostEqual(Shared.level, 0.3)
+            backend.restore(saved)
+            self.assertAlmostEqual(Shared.level, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
